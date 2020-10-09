@@ -9,11 +9,12 @@ library(grid)
 library(gridExtra)
 library(ggcorrplot)
 library(ggstance)
-library(jtools)     # for regression model plots
+library(jtools)     
 library(broom)
-library(tufte)
+# library(tufte)    #excluding for now..weird errors
 library(rmarkdown)
 library(kableExtra)
+library(readr)
 
 
 # functions
@@ -91,19 +92,14 @@ nn_function <- function(measureFrom,measureTo,k) {
 
 
 
-## Data Wrangling
+## Reading in Data
 
-
-## URL to data
-data_src <- "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/Chapter3_4/"
-
-bostonCrimes <- read.csv(file.path(data_src,"bostonCrimes.csv"))
-
-boston       <- read.csv(file.path(data_src,"bostonHousePriceData_clean.csv"))
-
-boston.sf    <- boston %>% 
+miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
-  st_transform('ESRI:102286')
+  st_transform('ESRI:102658')
+
+plot(miamiHomes.sf[,1])
 
 nhoods <- 
   st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.geojson") %>%
