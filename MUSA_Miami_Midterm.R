@@ -8,6 +8,7 @@ library(caret)
 library(ckanr)
 library(FNN)
 library(viridis)
+library(tidycensus)
 library(geosphere)
 library(osmdata)
 library(grid)
@@ -136,8 +137,16 @@ shoreline.point <- st_cast(shoreline,"POINT")
 
 miamiHomes.sf <-
   miamiHomes.sf %>%
-  mutate(Shore = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                             st_coordinates(st_centroid(shoreline.point)),1))
+  mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                             st_coordinates(st_centroid(shoreline.point)),1)) %>%
+  mutate(Shore2 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                           st_coordinates(st_centroid(shoreline.point)),2)) %>%
+  mutate(Shore3 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                            st_coordinates(st_centroid(shoreline.point)),3)) %>%
+  mutate(Shore4 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                            st_coordinates(st_centroid(shoreline.point)),4)) %>%
+  mutate(Shore5 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                            st_coordinates(st_centroid(shoreline.point)),5))
 
 
 #mapping it...idk why this won't work
@@ -150,6 +159,24 @@ ggplot() + geom_sf(data=miami.base) +
 #Step 2 - Joining Neighborhoods to Miami.sf
 
 
+tracts <- 
+  get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
+                                             "B19013_001E","B25058_001E",
+                                             "B06012_002E"), 
+  year=2017, state= 12, county= 086, geometry=T, output="wide") %>%
+  st_transform('ESRI:102658') %>%
+  rename(TotalPop = B25026_001E, 
+         Whites = B02001_002E,
+         MedHHInc = B19013_001E, 
+         MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
+  dplyr::select(-Whites, -TotalPoverty) 
+
+
+miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
 
 
