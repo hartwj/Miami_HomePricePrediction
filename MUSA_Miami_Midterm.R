@@ -7,6 +7,9 @@ library(spdep)
 library(caret)
 library(ckanr)
 library(FNN)
+library(viridis)
+library(geosphere)
+library(osmdata)
 library(grid)
 library(gridExtra)
 library(ggcorrplot)
@@ -84,7 +87,7 @@ nn_function <- function(measureFrom,measureTo,k) {
     gather(points, point_distance, V1:ncol(.)) %>%
     arrange(as.numeric(thisPoint)) %>%
     group_by(thisPoint) %>%
-    summarize(pointDistance = mean(point_distance)) %>%
+    dplyr::summarize(pointDistance = mean(point_distance)) %>%
     arrange(as.numeric(thisPoint)) %>% 
     dplyr::select(-thisPoint) %>%
     pull()
@@ -109,6 +112,50 @@ glimpse(miamiHomes.sf)
 nhoods <- 
   st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.geojson") %>%
   st_transform('ESRI:102286')
+
+
+
+
+#Step 1 - Joinging shoreline distance to MiamiHomes.sf
+
+#dl data
+miami.base <- 
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
+  st_transform('ESRI:102658') %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+shoreline <-   st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
+  st_transform('ESRI:102658')
+
+#find shoreline that intersects miami
+shoreline <- st_intersection(shoreline, miami.base)
+
+#transform shoreline to points
+shoreline.point <- st_cast(shoreline,"POINT") 
+
+miamiHomes.sf <-
+  miamiHomes.sf %>%
+  mutate(Shore = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                             st_coordinates(st_centroid(shoreline.point)),1))
+
+
+#mapping it...idk why this won't work
+ggplot() + geom_sf(data=miami.base) + 
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore)) + 
+  scale_colour_viridis()
+
+
+
+#Step 2 - Joining Neighborhoods to Miami.sf
+
+
+
+
+
+
+
+
 
 
 # finding counts by group
