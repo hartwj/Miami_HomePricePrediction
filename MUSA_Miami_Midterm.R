@@ -179,10 +179,12 @@ miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
-  dplyr::select(Folio, SalePrice, Property.Zip, Property.City, AdjustedSqFt,
+  dplyr::select(Folio, SalePrice, saleYear, Property.Zip, Mailing.zip, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Units, YearBuilt, EffectiveYearBuilt,
                 LivingSqFt, ActualSqFt, toPredict, starts_with("Shore"),
-                GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry)
+                GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry) %>%
+  mutate(YearOld = 2018 - YearBuilt) %>%
+  mutate(YearOldEffect = 2018 - EffectiveYearBuilt) #fix 2018
 
 ## Runing a Correlation Matrix to find interesting variables
 
