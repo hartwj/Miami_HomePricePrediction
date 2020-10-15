@@ -1,7 +1,9 @@
 # Read neighborhoods and join to Miami - Julian
 # Read water and join to Miami - Juliana
 
+
 # --- Setup: Libraries ----
+
 
 library(tidyverse)
 library(ggplot2)
@@ -21,6 +23,10 @@ library(geosphere)
 library(caret)
 library(ckanr)
 library(FNN)
+library(viridis)
+library(tidycensus)
+library(geosphere)
+library(osmdata)
 library(grid)
 library(gridExtra)
 library(ggstance)
@@ -109,9 +115,11 @@ census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 # --- Part 1. Data Wrangling ----
 
+
 ### Reading in Home Price Data & Base Map
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
+
 
 miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
 miamiHomes.sf <- miamiHomes %>% 
@@ -119,15 +127,18 @@ miamiHomes.sf <- miamiHomes %>%
   st_transform('ESRI:102658')
 
 names(miamiHomes.sf)
+
 mapview(miamiHomes.sf[1,])
 glimpse(miamiHomes.sf)
 
 # Read in base map
+
 miami.base <- 
   st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
   st_transform('ESRI:102658') %>%
   filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
   st_union()
+
 
 # Create border box around Miami base map to pull data from OSM
 xmin = st_bbox(miami.base)[[1]]
@@ -166,9 +177,11 @@ miamiHomes.sf <- miamiHomes.sf %>%
                               st_coordinates(st_centroid(shoreline.point)),5))
 
 # Mapping distance to shore
+
 ggplot() + geom_sf(data=miami.base) + 
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
+
 
 # Specify saleYear as integer, and create month feature
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
@@ -218,6 +231,7 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 numericVars <- 
   select_if(miamiHomes.train, is.numeric) %>% na.omit()
 
+
 ggcorrplot(
   round(cor(numericVars), 1), 
   p.mat = cor_pmat(numericVars),
@@ -227,11 +241,13 @@ ggcorrplot(
   labs(title = "Correlation across numeric variables") 
 
 
+
 # --- Part 3. Feature Engineering ----
 
 # Specify saleYear as integer, and create month feature -- NOT CORRELATED
 # miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 # miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
+
 
 glimpse(miamiHomes.sf) 
 
@@ -403,6 +419,7 @@ plot_summs(reg1, livingReg)
 
 ## External model validation
 
+
 # Evaluating a model through its predictions on *new* data.
 
 # set random seed
@@ -457,6 +474,7 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
   theme(
     legend.position = "none"
   )
+
 
 ## Cross-validation
 
