@@ -145,13 +145,16 @@ miamiHomes.sf <-
 
 #mapping it...idk why this won't work
 ggplot() + geom_sf(data=miami.base) + 
-  geom_sf(data=miamiHomes.sf, aes(colour=Shore)) + 
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
 
 
 
 #Step 2 - Joining Neighborhoods to Miami.sf
 
+# Load census API key
+
+census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 tracts <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
@@ -172,7 +175,27 @@ tracts <-
 
 miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
+## cleaning miamiHomes.sf
 
+miamiHomesClean.sf <- 
+  miamiHomes.sf %>%
+  dplyr::select(Folio, SalePrice, Property.Zip, Property.City, AdjustedSqFt,
+                LotSize, Bed, Bath, Stories, Units, YearBuilt, EffectiveYearBuilt,
+                LivingSqFt, ActualSqFt, toPredict, starts_with("Shore"),
+                GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry)
+
+## Runing a Correlation Matrix to find interesting variables
+
+numericVars <- 
+  select_if(st_drop_geometry(miamiHomesClean.sf), is.numeric) %>% na.omit()
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across numeric variables") 
 
 
 
