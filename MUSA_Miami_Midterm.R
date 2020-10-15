@@ -1,25 +1,9 @@
-# Read neighborhoods and join to Miami - Julian
-# Read water and join to Miami - Juliana
-
 
 # --- Setup: Libraries ----
 
-
 library(tidyverse)
-library(ggplot2)
 library(sf)
-library(rmarkdown)
-library(kableExtra)
-library(viridis)
-library(tidycensus)
-library(osmdata)
-library(mapview)
-library(lubridate)
-library(ggcorrplot)
-
-
 library(spdep)
-library(geosphere)
 library(caret)
 library(ckanr)
 library(FNN)
@@ -29,15 +13,17 @@ library(geosphere)
 library(osmdata)
 library(grid)
 library(gridExtra)
+library(ggcorrplot)
 library(ggstance)
 library(jtools)     
 library(broom)
 # library(tufte)    #excluding for now..weird errors
+library(rmarkdown)
+library(kableExtra)
 library(readr)
 
 
-# --- Setup: Functions & Aesthetics ----
-## Setup functions
+# functions
 mapTheme <- function(base_size = 12) {
   theme(
     text = element_text( color = "black"),
@@ -110,19 +96,14 @@ nn_function <- function(measureFrom,measureTo,k) {
   return(output)  
 }
 
-# Load census API key
-census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
-
-# --- Part 1. Data Wrangling ----
-
 
 ### Reading in Home Price Data & Base Map
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
 
 
-miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
-miamiHomes.sf <- miamiHomes %>% 
+miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
 
@@ -133,11 +114,17 @@ glimpse(miamiHomes.sf)
 
 # Read in base map
 
+
+#Step 1 - Joinging shoreline distance to MiamiHomes.sf
+
+#dl data
+
 miami.base <- 
   st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
   st_transform('ESRI:102658') %>%
   filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
   st_union()
+
 
 
 # Create border box around Miami base map to pull data from OSM
@@ -157,40 +144,53 @@ ggplot() +
 ### Joining shoreline distance to MiamiHomes.sf
 
 # Read in shoreline shapefile
-shoreline <- st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
+
+shoreline <-   st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
   st_transform('ESRI:102658')
 
-# Find shoreline that intersects miami, and transform to points
+#find shoreline that intersects miami
 shoreline <- st_intersection(shoreline, miami.base)
+
+#transform shoreline to points
 shoreline.point <- st_cast(shoreline,"POINT") 
 
-miamiHomes.sf <- miamiHomes.sf %>%
+miamiHomes.sf <-
+  miamiHomes.sf %>%
   mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),1)) %>%
+                             st_coordinates(st_centroid(shoreline.point)),1)) %>%
   mutate(Shore2 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),2)) %>%
+                           st_coordinates(st_centroid(shoreline.point)),2)) %>%
   mutate(Shore3 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),3)) %>%
+                            st_coordinates(st_centroid(shoreline.point)),3)) %>%
   mutate(Shore4 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),4)) %>%
+                            st_coordinates(st_centroid(shoreline.point)),4)) %>%
   mutate(Shore5 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),5))
+                            st_coordinates(st_centroid(shoreline.point)),5))
 
-# Mapping distance to shore
+#mapping it...idk why this won't work
 
 ggplot() + geom_sf(data=miami.base) + 
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
 
 
+
 # Specify saleYear as integer, and create month feature
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 
-### Joining Census tract data to Miami.sf
-tracts <- get_acs(geography = "tract", variables = c(
-        "B25026_001E","B02001_002E","B19013_001E","B25058_001E","B06012_002E"), 
-        year=2017, state= 12, county= 086, geometry=T, output="wide") %>%
+
+#Step 2 - Joining Neighborhoods to Miami.sf
+
+# Load census API key
+
+census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
+
+tracts <- 
+  get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
+                                             "B19013_001E","B25058_001E",
+                                             "B06012_002E"), 
+  year=2017, state= 12, county= 086, geometry=T, output="wide") %>%
   st_transform('ESRI:102658') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
@@ -202,34 +202,24 @@ tracts <- get_acs(geography = "tract", variables = c(
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
+
 miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
-# --- Part 2. Exploratory Analyses ----
-
-glimpse(miamiHomes.sf) 
+## cleaning miamiHomes.sf
 
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
-  dplyr::select(Folio, SalePrice, saleYear, Property.Zip, Mailing.Zip, Property.City, AdjustedSqFt,
+  dplyr::select(Folio, SalePrice, saleYear, Property.Zip, Mailing.zip, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Units, YearBuilt, EffectiveYearBuilt,
                 LivingSqFt, ActualSqFt, toPredict, starts_with("Shore"),
                 GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry) %>%
-  mutate(Age = saleYear - YearBuilt) %>%
-  mutate(EffectiveAge = saleYear - EffectiveYearBuilt) 
+  mutate(YearOld = 2018 - YearBuilt) %>%
+  mutate(YearOldEffect = 2018 - EffectiveYearBuilt) #fix 2018
 
-  
-### Corr matrix
-
-miamiHomes.train <- miamiHomesClean.sf %>% 
-  st_drop_geometry() %>%
-  filter(toPredict == 0)
-
-miamiHomes.test <- miamiHomesClean.sf %>% 
-  st_drop_geometry() %>%
-  filter(toPredict == 1)
+## Runing a Correlation Matrix to find interesting variables
 
 numericVars <- 
-  select_if(miamiHomes.train, is.numeric) %>% na.omit()
+  select_if(st_drop_geometry(miamiHomesClean.sf), is.numeric) %>% na.omit()
 
 
 ggcorrplot(
@@ -251,12 +241,10 @@ ggcorrplot(
 
 glimpse(miamiHomes.sf) 
 
-# --- Part 4. Feature Selection ----
 
-# --- Part 5. Model Estimation & Validation ----
 
-# --- Boston Lab ----
-####### finding counts by group
+
+# finding counts by group
 plot1 <- group_by(bostonCrimes, OFFENSE_CODE_GROUP) %>%
   summarize(count = n()) %>%
   arrange(-count) %>% top_n(10)
