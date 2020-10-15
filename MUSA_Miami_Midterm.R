@@ -4,6 +4,7 @@
 # --- Setup: Libraries ----
 
 library(tidyverse)
+library(ggplot2)
 library(sf)
 library(rmarkdown)
 library(kableExtra)
@@ -11,6 +12,9 @@ library(viridis)
 library(tidycensus)
 library(osmdata)
 library(mapview)
+library(lubridate)
+library(ggcorrplot)
+
 
 library(spdep)
 library(geosphere)
@@ -19,14 +23,12 @@ library(ckanr)
 library(FNN)
 library(grid)
 library(gridExtra)
-library(ggcorrplot)
 library(ggstance)
 library(jtools)     
 library(broom)
 # library(tufte)    #excluding for now..weird errors
-
 library(readr)
-library(lubridate)
+
 
 # --- Setup: Functions & Aesthetics ----
 ## Setup functions
@@ -168,6 +170,9 @@ ggplot() + geom_sf(data=miami.base) +
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
 
+# Specify saleYear as integer, and create month feature
+miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
+miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 
 ### Joining Census tract data to Miami.sf
 tracts <- get_acs(geography = "tract", variables = c(
@@ -188,15 +193,30 @@ miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
 # --- Part 2. Exploratory Analyses ----
 
-# Specify saleYear as integer, and create month feature
-miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
-miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
-
 glimpse(miamiHomes.sf) 
 
+miamiHomesClean.sf <- 
+  miamiHomes.sf %>%
+  dplyr::select(Folio, SalePrice, saleYear, Property.Zip, Mailing.Zip, Property.City, AdjustedSqFt,
+                LotSize, Bed, Bath, Stories, Units, YearBuilt, EffectiveYearBuilt,
+                LivingSqFt, ActualSqFt, toPredict, starts_with("Shore"),
+                GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry) %>%
+  mutate(Age = saleYear - YearBuilt) %>%
+  mutate(EffectiveAge = saleYear - EffectiveYearBuilt) 
+
+  
 ### Corr matrix
+
+miamiHomes.train <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 0)
+
+miamiHomes.test <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 1)
+
 numericVars <- 
-  select_if(st_drop_geometry(miamiHomes.sf), is.numeric) %>% na.omit()
+  select_if(miamiHomes.train, is.numeric) %>% na.omit()
 
 ggcorrplot(
   round(cor(numericVars), 1), 
@@ -206,11 +226,12 @@ ggcorrplot(
   insig = "blank") +  
   labs(title = "Correlation across numeric variables") 
 
+
 # --- Part 3. Feature Engineering ----
 
-# Specify saleYear as integer, and create month feature
-miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
-miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
+# Specify saleYear as integer, and create month feature -- NOT CORRELATED
+# miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
+# miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 
 glimpse(miamiHomes.sf) 
 
