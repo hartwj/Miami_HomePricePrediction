@@ -110,12 +110,6 @@ names(miamiHomes.sf)
 plot(miamiHomes.sf[,1])
 glimpse(miamiHomes.sf)
 
-nhoods <- 
-  st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.geojson") %>%
-  st_transform('ESRI:102286')
-
-
-
 
 #Step 1 - Joinging shoreline distance to MiamiHomes.sf
 
