@@ -2,8 +2,20 @@
 # --- Setup: Libraries ----
 
 library(tidyverse)
+library(ggplot2)
 library(sf)
+library(rmarkdown)
+library(kableExtra)
+library(viridis)
+library(tidycensus)
+library(osmdata)
+library(mapview)
+library(lubridate)
+library(ggcorrplot)
+
+
 library(spdep)
+library(geosphere)
 library(caret)
 library(ckanr)
 library(FNN)
@@ -13,13 +25,10 @@ library(geosphere)
 library(osmdata)
 library(grid)
 library(gridExtra)
-library(ggcorrplot)
 library(ggstance)
 library(jtools)     
 library(broom)
 # library(tufte)    #excluding for now..weird errors
-library(rmarkdown)
-library(kableExtra)
 library(readr)
 
 
@@ -157,15 +166,7 @@ shoreline.point <- st_cast(shoreline,"POINT")
 miamiHomes.sf <-
   miamiHomes.sf %>%
   mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                             st_coordinates(st_centroid(shoreline.point)),1)) %>%
-  mutate(Shore2 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                           st_coordinates(st_centroid(shoreline.point)),2)) %>%
-  mutate(Shore3 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                            st_coordinates(st_centroid(shoreline.point)),3)) %>%
-  mutate(Shore4 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                            st_coordinates(st_centroid(shoreline.point)),4)) %>%
-  mutate(Shore5 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                            st_coordinates(st_centroid(shoreline.point)),5))
+                             st_coordinates(st_centroid(shoreline.point)),1))
 
 #mapping it...idk why this won't work
 
@@ -176,6 +177,7 @@ ggplot() + geom_sf(data=miami.base) +
 
 
 # Specify saleYear as integer, and create month feature
+# ends up not being correlated
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 
@@ -183,8 +185,6 @@ miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 #Step 2 - Joining Neighborhoods to Miami.sf
 
 # Load census API key
-
-census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 tracts <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
@@ -209,17 +209,26 @@ miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
-  dplyr::select(Folio, SalePrice, saleYear, Property.Zip, Mailing.zip, Property.City, AdjustedSqFt,
-                LotSize, Bed, Bath, Stories, Units, YearBuilt, EffectiveYearBuilt,
-                LivingSqFt, ActualSqFt, toPredict, starts_with("Shore"),
-                GEOID, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, geometry) %>%
-  mutate(YearOld = 2018 - YearBuilt) %>%
-  mutate(YearOldEffect = 2018 - EffectiveYearBuilt) #fix 2018
+  dplyr::select(Folio, SalePrice, Property.Zip, Mailing.Zip, Property.City, AdjustedSqFt,
+                LotSize, Bed, Bath, Stories, YearBuilt, EffectiveYearBuilt,
+                LivingSqFt, ActualSqFt, toPredict, Shore1, GEOID, TotalPop, MedHHInc, MedRent, pctWhite, 
+                pctPoverty, geometry) %>%
+  mutate(Age = 2018 - YearBuilt) %>%
+  mutate(EffectiveAge = 2018 - EffectiveYearBuilt) # I literally could not get this to work without 2018
 
 ## Runing a Correlation Matrix to find interesting variables
 
+miamiHomes.train <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 0)
+
+miamiHomes.test <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 1)
+
+
 numericVars <- 
-  select_if(st_drop_geometry(miamiHomesClean.sf), is.numeric) %>% na.omit()
+  select_if(miamiHomes.train, is.numeric) %>% na.omit()
 
 
 ggcorrplot(
@@ -234,12 +243,44 @@ ggcorrplot(
 
 # --- Part 3. Feature Engineering ----
 
+
 # Specify saleYear as integer, and create month feature -- NOT CORRELATED
 # miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 # miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
 
 
 glimpse(miamiHomes.sf) 
+
+
+
+cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
+
+
+hist(miamiHomes.train$SalePrice)
+ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+## Univarite Regrssion
+Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+  dplyr::select(Shore1))
+
+Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID))
+
+summary(Reg1)
+summary(Reg2)
+summ(Reg1)
+
+#GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
+
+
+
+#Jumping into K fold cross validation for generalizability
+
+
+
+
 
 
 
