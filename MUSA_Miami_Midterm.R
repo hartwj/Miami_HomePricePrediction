@@ -274,10 +274,99 @@ summ(Reg1)
 
 #GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
 
+# -----Part 4 - Train/Test Split -----------
 
 
-#Jumping into K fold cross validation for generalizability
+# set random seed
+set.seed(3171)
 
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = miamiHomes.train$SalePrice, 
+  p = .60, list = FALSE)
+# split data into training and test
+miami.training <- miamiHomes.train[inTrain,] 
+miami.test     <- miamiHomes.train[-inTrain,]  
+
+# Regression  
+reg3 <- lm(SalePrice ~ ., data = miami.test %>%
+             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID))
+#reg3 regularly gets adjusted R2 of 0.80 to 0.81
+
+
+summary(reg3)
+
+reg4 <- lm(SalePrice ~ ., data = miami.test %>%
+             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID,
+                           -AdjustedSqFt, -YearBuilt, -LivingSqFt,
+                           -toPredict, -TotalPop, -MedHHInc,
+                           -EffectiveAge,-EffectiveYearBuilt))
+summary(reg4)
+#reg4 improves to .81
+
+reg5 <- lm(SalePrice ~ ., data = miami.test %>%
+             dplyr::select(-Property.Zip, -GEOID,
+                           -AdjustedSqFt, -YearBuilt, -LivingSqFt,
+                           -toPredict, -TotalPop, -MedHHInc,
+                           -EffectiveAge,-EffectiveYearBuilt))
+
+summary(reg5)
+#GEOID = .8337, property zip = .99, mailing zip 0.845
+
+#The neighborhood variables clearly make our model better, but could still be overfitting
+
+
+# --------K Fold Cross Validation --------------------
+
+fitControl <- trainControl(method = "cv", 
+                           number = 10,
+                           # savePredictions differs from book
+                           savePredictions = TRUE)
+
+set.seed(722)
+# crimes.buffer feature added
+# for k-folds CV
+reg.cv1 <- 
+  train(SalePrice ~ ., data = miamiHomes.train %>%
+          dplyr::select(-Property.Zip, -GEOID, -Mailing.Zip,
+                        -AdjustedSqFt, -YearBuilt, -LivingSqFt,
+                        -toPredict, -TotalPop, -MedHHInc,
+                        -EffectiveAge,-EffectiveYearBuilt), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.pass)
+
+reg.cv1
+
+#No neighborhoods R2=0.788, MAE=525,277
+
+reg.cv2 <- 
+  train(SalePrice ~ ., data = miamiHomes.train %>%
+          dplyr::select(-Property.Zip,-Mailing.Zip,
+                        -AdjustedSqFt, -YearBuilt, -LivingSqFt,
+                        -toPredict, -TotalPop, -MedHHInc,
+                        -EffectiveAge,-EffectiveYearBuilt), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.pass)
+
+reg.cv2
+
+#mailing zip R2=0.735, MAE=537,844    GEOID R2=0.796, MAE=523,302  Property zip broke R lol
+
+#starting from scratch, lets build a model
+#our best model was reg.cv2
+
+set.seed(724)
+reg.cv3 <- 
+  train(SalePrice ~ ., data = miamiHomes.train %>%
+          dplyr::select(SalePrice, AdjustedSqFt, LotSize, GEOID, Bed, Bath, stories, Shore1,
+                        Age, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.pass)
+
+reg.cv3
 
 
 
