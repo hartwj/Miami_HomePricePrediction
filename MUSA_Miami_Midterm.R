@@ -14,7 +14,9 @@ library(osmdata)
 library(mapview)
 library(lubridate)
 library(ggcorrplot)
+library(raster)
 
+library(rgeos)
 library(spdep)
 library(geosphere)
 library(caret)
@@ -369,14 +371,41 @@ ggplot() +
        subtitle = "1/2 Mile Ring Buffers from Roads") +
   scale_colour_viridis()
 
-### Elementary School Polygons
-# https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson
+### School Polygons
+elem <- 
+  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  st_transform('ESRI:102658') 
+midsc <- 
+  st_read("https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  st_transform('ESRI:102658') 
+hs <- 
+  st_read("https://opendata.arcgis.com/datasets/9004dbf5f7f645d493bfb6b875a43dc1_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  st_transform('ESRI:102658') 
 
-### Middle School Polygons
-# https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson
+miamiHomes.sch <- st_join(miamiHomes.rings, elem[miami.base,], join = st_within) %>%
+  rename(elemID = ID)
 
-### High School Polygons
-# https://opendata.arcgis.com/datasets/9004dbf5f7f645d493bfb6b875a43dc1_0.geojson
+miamiHomes.sch <- st_join(miamiHomes.sch, midsc[miami.base,], join = st_within) %>%
+  rename(msID = ID)
+
+miamiHomes.sch <- st_join(miamiHomes.sch, hs[miami.base,], join = st_within) %>%
+  rename(hsID = ID)
+
+miamiHomesClean.sf <- 
+  miamiHomes.sch %>%
+  mutate(Age = saleYear - YearBuilt) %>%
+  mutate(elemID = as.integer(elemID)) %>%
+  mutate(msID = as.integer(msID)) %>%
+  mutate(hsID = as.integer(hsID)) %>%
+  dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
+                LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
+                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID.x, TotalPop.x, 
+                MedHHInc.x, MedRent.x, pctWhite.x, pctPoverty.x, road_dist, park_dist, 
+                elemID, msID, hsID, geometry) 
+
 
 ### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- 
@@ -385,7 +414,8 @@ miamiHomesClean.sf <-
   dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, geometry)
+                MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, 
+                elemID, msID, hsID, geometry)
 
 glimpse(miamiHomesClean.sf)
 
@@ -487,8 +517,8 @@ set.seed(732)
 
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
-                        -MedHHInc, -road_dist, -park_dist, -toPredict), 
+          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop.x, 
+                        -MedHHInc.x, -road_dist, -park_dist, -elemID, -hsID, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.omit)
