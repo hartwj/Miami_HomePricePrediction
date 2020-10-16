@@ -1,7 +1,6 @@
 
 # --- Setup: Libraries ----
 # Regex parsing package
-install.packages("stringr", dependencies = TRUE)
 library(stringr)
 
 library(tidyverse)
@@ -161,7 +160,7 @@ census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
 
-miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
@@ -207,8 +206,8 @@ shoreline.point <- st_cast(shoreline,"POINT")
 
 # Creating distance to shore feature
 miamiHomes.sf <- miamiHomes.sf %>%
-  mutate(Shore1 = nn_function(st_c(st_centroid(miamiHomes.sf)),
-                              st_c(st_centroid(shoreline.point)),1))
+  mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                              st_coordinates(st_centroid(shoreline.point)),1))
 
 # Map of Distance to Shore
 ggplot() + geom_sf(data=miami.base) + 
@@ -255,15 +254,16 @@ miamiHomesClean.sf <-
   mutate(Age = saleYear - YearBuilt) %>%
   dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
-                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID.x, TotalPop.x, 
-                MedHHInc.x, MedRent.x, pctWhite.x, pctPoverty.x, geometry)
+                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
+                MedHHInc, MedRent, pctWhite, pctPoverty, geometry)
 
 glimpse(miamiHomesClean.sf)
 
 ## Runing a Correlation Matrix to find interesting variables
 miamiHomes.train <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
-  filter(toPredict == 0)
+  filter(toPredict == 0) %>%
+  filter(SalePrice <= 1000000)
 miamiHomes.test <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
   filter(toPredict == 1)
@@ -297,7 +297,7 @@ Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
   dplyr::select(Shore1))
 
 Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID))
+             dplyr::select(-GEOID))
 
 summary(Reg1)
 summary(Reg2)
@@ -321,14 +321,14 @@ miami.test     <- miamiHomes.train[-inTrain,]
 
 # Regression  
 reg3 <- lm(SalePrice ~ ., data = miami.test %>%
-             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID))
+             dplyr::select(-GEOID))
 #reg3 regularly gets adjusted R2 of 0.80 to 0.81
 
 
 summary(reg3)
 
 reg4 <- lm(SalePrice ~ ., data = miami.test %>%
-             dplyr::select(-Mailing.Zip, -Property.Zip, -GEOID,
+             dplyr::select(-GEOID,
                            -AdjustedSqFt, -YearBuilt, -LivingSqFt,
                            -toPredict, -TotalPop, -MedHHInc,
                            -EffectiveAge,-EffectiveYearBuilt))
@@ -354,13 +354,13 @@ fitControl <- trainControl(method = "cv",
                            # savePredictions differs from book
                            savePredictions = TRUE)
 
-set.seed(722)
+set.seed(732)
 #No neighborhoods R2=0.788, MAE=525,277
 
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop.x, 
-                        -MedHHInc.x, -toPredict), 
+          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+                        -MedHHInc, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.pass)
@@ -378,20 +378,41 @@ summary(reg6)
 # Shore1, GEOID, MedRent, pctWhite, pctPoverty
 # GEOID = .8337, property zip = .99, mailing zip 0.845
 
+# How do we interpret the spread of values between the folds?
+# extract predictions from CV object
+cv_preds <- reg.cv2$pred
+# compare number of observations between data sets
+nrow(miamiHomes.train)
+nrow(cv_preds)
+
+## Create dataset with "out of fold" predictions and original data
+map_preds <- miamiHomes.test %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(SalePrice.AbsError = abs(pred - SalePrice))
+
+
+#output to CSV
+
+output_preds <- map_preds %>%
+  dplyr::select(pred, folio)
+
+
+
+
+
+# weird CRS fix to boston.sf
+st_crs(map_preds) <- st_crs(nhoods)
 
 #starting from scratch, lets build a model
 #our best model was reg.cv2
 
-set.seed(724)
-reg.cv3 <- 
-  train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(SalePrice, AdjustedSqFt, LotSize, GEOID, Bed, Bath, stories, Shore1,
-                        Age, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty), 
-        method = "lm", 
-        trControl = fitControl, 
-        na.action = na.pass)
 
-reg.cv3
+
+
+
+
+
 
 
 
