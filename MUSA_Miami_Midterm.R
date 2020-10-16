@@ -1,5 +1,8 @@
 
 # --- Setup: Libraries ----
+# Regex parsing package
+install.packages("stringr", dependencies = TRUE)
+library(stringr)
 
 library(tidyverse)
 library(ggplot2)
@@ -13,14 +16,11 @@ library(mapview)
 library(lubridate)
 library(ggcorrplot)
 
-
 library(spdep)
 library(geosphere)
 library(caret)
 library(ckanr)
 library(FNN)
-library(viridis)
-library(tidycensus)
 library(geosphere)
 library(osmdata)
 library(grid)
@@ -31,8 +31,8 @@ library(broom)
 # library(tufte)    #excluding for now..weird errors
 library(readr)
 
-
-# functions
+# --- Setup: Aesthetics & Functions ----
+## Aesthetics
 mapTheme <- function(base_size = 12) {
   theme(
     text = element_text( color = "black"),
@@ -86,6 +86,9 @@ qBr <- function(df, variable, rnd) {
 
 q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
+## Functions
+
+
 nn_function <- function(measureFrom,measureTo,k) {
   measureFrom_Matrix <- as.matrix(measureFrom)
   measureTo_Matrix <- as.matrix(measureTo)
@@ -105,36 +108,76 @@ nn_function <- function(measureFrom,measureTo,k) {
   return(output)  
 }
 
+multipleRingBuffer <- function(inputPolygon, maxDistance, interval) {
+  distances <- seq(0, maxDistance, interval)
+  distancesCounter <- 2
+  numberOfRings <- floor(maxDistance / interval)
+  numberOfRingsCounter <- 1
+  allRings <- data.frame()
+  
+  while (numberOfRingsCounter <= numberOfRings) {
+    if(distances[distancesCounter] < 0 & distancesCounter == 2){
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer1_ <- st_difference(inputPolygon, buffer1)
+      thisRing <- st_cast(buffer1_, "POLYGON")
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    else if(distances[distancesCounter] < 0 & distancesCounter > 2) {
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer2 <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      thisRing <- st_difference(buffer2,buffer1)
+      thisRing <- st_cast(thisRing, "POLYGON")
+      thisRing <- as.data.frame(thisRing$geometry)
+      thisRing$distance <- distances[distancesCounter]
+    }
+    
+    else {
+      buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      buffer1_ <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      thisRing <- st_difference(buffer1,buffer1_)
+      thisRing <- st_cast(thisRing, "POLYGON")
+      thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      thisRing$distance <- distances[distancesCounter]
+    }  
+    
+    allRings <- rbind(allRings, thisRing)
+    distancesCounter <- distancesCounter + 1
+    numberOfRingsCounter <- numberOfRingsCounter + 1
+  }
+  
+  allRings <- st_as_sf(allRings)
+}
+
+
+## Load census API key
+census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
+
+# --- Part 1: Data Wrangling ----
 
 ### Reading in Home Price Data & Base Map
+
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
 
-
-miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
 
-names(miamiHomes.sf)
-
 mapview(miamiHomes.sf[1,])
 glimpse(miamiHomes.sf)
 
-# Read in base map
+# Specify saleYear as integer
+miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 
-
-#Step 1 - Joinging shoreline distance to MiamiHomes.sf
-
-#dl data
-
+### Read in base map
 miami.base <- 
   st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
   st_transform('ESRI:102658') %>%
   filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
   st_union()
-
-
 
 # Create border box around Miami base map to pull data from OSM
 xmin = st_bbox(miami.base)[[1]]
@@ -153,44 +196,32 @@ ggplot() +
 ### Joining shoreline distance to MiamiHomes.sf
 
 # Read in shoreline shapefile
-
-shoreline <-   st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
+shoreline <- st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
   st_transform('ESRI:102658')
 
-#find shoreline that intersects miami
+# Clip shoreline by base map
 shoreline <- st_intersection(shoreline, miami.base)
 
-#transform shoreline to points
+# Transform shoreline to points
 shoreline.point <- st_cast(shoreline,"POINT") 
 
-miamiHomes.sf <-
-  miamiHomes.sf %>%
-  mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                             st_coordinates(st_centroid(shoreline.point)),1))
+# Creating distance to shore feature
+miamiHomes.sf <- miamiHomes.sf %>%
+  mutate(Shore1 = nn_function(st_c(st_centroid(miamiHomes.sf)),
+                              st_c(st_centroid(shoreline.point)),1))
 
-#mapping it...idk why this won't work
-
+# Map of Distance to Shore
 ggplot() + geom_sf(data=miami.base) + 
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
 
-
-
-# Specify saleYear as integer, and create month feature
-# ends up not being correlated
-miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
-miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
-
-
-#Step 2 - Joining Neighborhoods to Miami.sf
-
-# Load census API key
-
+### Joining Neighborhoods to Miami.sf
+# Load Census data
 tracts <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
                                              "B19013_001E","B25058_001E",
                                              "B06012_002E"), 
-  year=2017, state= 12, county= 086, geometry=T, output="wide") %>%
+  year=2018, state= 12, county= 086, geometry=T, output="wide") %>%
   st_transform('ESRI:102658') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
@@ -202,11 +233,23 @@ tracts <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
-
 miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 
-## cleaning miamiHomes.sf
+### Parsing XF variables
+# Make all XF# text lowercase and combine into one string variable
+miamiHomes.sf <- miamiHomes.sf %>%
+  mutate(XF1 = tolower(XF1)) %>%
+  mutate(XF2 = tolower(XF2)) %>%
+  mutate(XF3 = tolower(XF3)) %>%
+  mutate(XF_all = paste(XF1,XF2,XF3,sep = " "))
 
+# Use regex to create patio, pool, and fence dummy variables
+miamiHomes.sf <- miamiHomes.sf %>%
+  mutate(Pool = as.integer(str_detect(XF_all,"pool"))) %>%
+  mutate(Fence = as.integer(str_detect(XF_all,"fence"))) %>%
+  mutate(Patio = as.integer(str_detect(XF_all,"Patio")))
+  
+## Cleaning miamiHomes.sf
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
   dplyr::select(Folio, SalePrice, Property.Zip, Mailing.Zip, Property.City, AdjustedSqFt,
@@ -217,7 +260,6 @@ miamiHomesClean.sf <-
   mutate(EffectiveAge = 2018 - EffectiveYearBuilt) # I literally could not get this to work without 2018
 
 ## Runing a Correlation Matrix to find interesting variables
-
 miamiHomes.train <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
   filter(toPredict == 0)
@@ -244,14 +286,6 @@ ggcorrplot(
 # --- Part 3. Feature Engineering ----
 
 
-# Specify saleYear as integer, and create month feature -- NOT CORRELATED
-# miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
-# miamiHomes.sf$saleMonth <- as.integer(month(mdy(miamiHomes.sf$saleDate)))
-
-
-glimpse(miamiHomes.sf) 
-
-
 
 cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
 
@@ -261,7 +295,7 @@ ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = Adju
   geom_point() +
   geom_smooth(method = "lm")
 
-## Univarite Regrssion
+## Univarite Regression
 Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
   dplyr::select(Shore1))
 
@@ -805,3 +839,33 @@ tidy(reg.nhood) %>%
   filter(str_detect(term, "Name")) %>% 
   kable() %>% 
   kable_styling()
+
+
+# OSM Data
+
+#Study area base
+miamiBound <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union() %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102658')
+
+#base for osm (not projected so that it works)
+miamiBoundOSM <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+#OSM bounding box (used the OSM - specific, non-projected, base)
+xmin = st_bbox(miamiBoundOSM)[[1]]
+ymin = st_bbox(miamiBoundOSM)[[2]]
+xmax = st_bbox(miamiBoundOSM)[[3]]  
+ymax = st_bbox(miamiBoundOSM)[[4]]
+
+#bars, restaurants, shopping
+foodBev <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
+  add_osm_feature(key = 'amenity', value = c("bar","pub","restaurant","cafe")) %>%
+  osmdata_xml(filename = 'foodBev.osm')
+
+foodBev <- sf::st_read('foodBev.osm', layer = 'points') %>%
+  st_as_sf(coords = c("LON", "LAT"), crs = EPSG:3857, agr = "constant") %>% #EPSG:3857 is the projection that most OSM data is in
+  st_transform('ESRI:102658')
