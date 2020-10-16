@@ -153,7 +153,7 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval) {
 ## Load census API key
 census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
-# --- Part 1: Data Wrangling ----
+# --- Part 1&3: Data Wrangling & Feature Engineering ----
 
 ### Reading in Home Price Data & Base Map
 
@@ -192,8 +192,8 @@ ggplot() +
 #  add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
 #  osmdata_sf()
 
-### Joining shoreline distance to MiamiHomes.sf
 
+### Adding shoreline distance
 # Read in shoreline shapefile
 shoreline <- st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
   st_transform('ESRI:102658')
@@ -214,8 +214,7 @@ ggplot() + geom_sf(data=miami.base) +
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
   scale_colour_viridis()
 
-### Joining Neighborhoods to Miami.sf
-# Load Census data
+### Adding Census data
 tracts <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
                                              "B19013_001E","B25058_001E",
@@ -242,13 +241,75 @@ miamiHomes.sf <- miamiHomes.sf %>%
   mutate(XF3 = tolower(XF3)) %>%
   mutate(XF_all = paste(XF1,XF2,XF3,sep = " "))
 
-# Use regex to create patio, pool, and fence dummy variables
+# Use stringr package to create patio, pool, and fence dummy variables
 miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Pool = as.integer(str_detect(XF_all,"pool"))) %>%
   mutate(Fence = as.integer(str_detect(XF_all,"fence"))) %>%
   mutate(Patio = as.integer(str_detect(XF_all,"patio")))
   
-## Cleaning miamiHomes.sf
+# OSM Data
+
+#Study area base
+miamiBound <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union() %>%
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
+  st_transform('ESRI:102658')
+
+#base for osm (not projected so that it works)
+miamiBoundOSM <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+#OSM bounding box (used the OSM - specific, non-projected, base)
+xmin = st_bbox(miamiBoundOSM)[[1]]
+ymin = st_bbox(miamiBoundOSM)[[2]]
+xmax = st_bbox(miamiBoundOSM)[[3]]  
+ymax = st_bbox(miamiBoundOSM)[[4]]
+
+#bars, restaurants, shopping
+foodBev <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
+  add_osm_feature(key = 'amenity', value = c("bar","pub","restaurant","cafe")) %>%
+  osmdata_xml(filename = 'foodBev.osm')
+
+foodBev <- sf::st_read('foodBev.osm', layer = 'points') %>%
+  st_as_sf(coords = c("LON", "LAT"), crs = EPSG:3857, agr = "constant") %>% #EPSG:3857 is the projection that most OSM data is in
+  st_transform('ESRI:102658')
+
+# Creating buffers for distance to major roads
+roads <- 
+  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
+  filter(CLASS == 1) %>%
+  st_transform('ESRI:102658') 
+
+miamiRds <- roads[miami.base,]
+
+# Create unioned buffer for major roads
+miamiRds.buffer <- 
+  rbind(
+    st_buffer(miamiRds, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(miamiRds, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+# Plot to check buffer
+# Map of Distance to Shore
+ggplot() + geom_sf(data=miami.base) +
+  geom_sf(data=st_union(miamiRds.buffer), 
+          color = 'red', fill = 'transparent') +
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore1),
+          show.legend = "line", size= .5) +
+  #scale_colour_manual(values = c("orange","blue")) +
+  labs(title="Miami Major Roads") +
+  scale_colour_viridis()
+
+# Create 1/2 mile ring buffers
+miami.Rings <- multipleRingBuffer(miamiRds.buffer, 36960, 2640)
+
+
+### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
   mutate(Age = saleYear - YearBuilt) %>%
@@ -259,6 +320,7 @@ miamiHomesClean.sf <-
 
 glimpse(miamiHomesClean.sf)
 
+# --- Part 2: Exploratory Analysis ----
 ## Runing a Correlation Matrix to find interesting variables
 miamiHomes.train <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
@@ -282,10 +344,7 @@ ggcorrplot(
 
 
 
-# --- Part 3. Feature Engineering ----
-
 cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
-
 
 hist(miamiHomes.train$SalePrice)
 ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
@@ -857,61 +916,4 @@ tidy(reg.nhood) %>%
   kable_styling()
 
 
-# OSM Data
 
-#Study area base
-miamiBound <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
-  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
-  st_union() %>%
-  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
-  st_transform('ESRI:102658')
-
-#base for osm (not projected so that it works)
-miamiBoundOSM <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
-  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
-  st_union()
-
-#OSM bounding box (used the OSM - specific, non-projected, base)
-xmin = st_bbox(miamiBoundOSM)[[1]]
-ymin = st_bbox(miamiBoundOSM)[[2]]
-xmax = st_bbox(miamiBoundOSM)[[3]]  
-ymax = st_bbox(miamiBoundOSM)[[4]]
-
-#bars, restaurants, shopping
-foodBev <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% 
-  add_osm_feature(key = 'amenity', value = c("bar","pub","restaurant","cafe")) %>%
-  osmdata_xml(filename = 'foodBev.osm')
-
-foodBev <- sf::st_read('foodBev.osm', layer = 'points') %>%
-  st_as_sf(coords = c("LON", "LAT"), crs = EPSG:3857, agr = "constant") %>% #EPSG:3857 is the projection that most OSM data is in
-  st_transform('ESRI:102658')
-
-# Creating buffers for distance to major roads
-MajRoads <- 
-  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
-  st_transform('ESRI:102658') 
-
-miamiRds <- MajRoads[miami.base,]
-
-# Create unioned buffer for major roads
-miamiRds.buffer <- 
-  rbind(
-    st_buffer(miamiRds, 2640) %>%
-      mutate(Legend = "Buffer") %>%
-      dplyr::select(Legend),
-    st_union(st_buffer(miamiRds, 2640)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
-
-# Plot to check buffer
-ggplot() + 
-  geom_sf(data=st_union(miamiRds.buffer)) +
-  geom_sf(data=miamiRds, 
-          #aes(colour = Line), 
-          show.legend = "point", size= 1) +
-  #scale_colour_manual(values = c("orange","blue")) +
-  labs(title="Miami Major Roads", 
-       subtitle="Miami & Miami Beach") +
-  mapTheme()
-
-miami.Rings <- multipleRingBuffer(buffer, 36960, 5280)
