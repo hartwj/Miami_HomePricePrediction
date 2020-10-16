@@ -153,7 +153,7 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval) {
 ## Load census API key
 census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
-# --- Part 1&3: Data Wrangling & Feature Engineering ----
+# --- Part 1: Data Wrangling ----
 
 ### Reading in Home Price Data & Base Map
 
@@ -192,6 +192,7 @@ ggplot() +
 #  add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
 #  osmdata_sf()
 
+# --- Part 2: Feature Engineering ----
 
 ### Adding shoreline distance
 # Read in shoreline shapefile
@@ -248,7 +249,6 @@ miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Patio = as.integer(str_detect(XF_all,"patio")))
   
 # OSM Data
-
 #Study area base
 miamiBound <- st_read("/Users/annaduan/Documents/GitHub/2_Miami\ Prediction/Raw\ Data/Municipal_Boundary.geojson") %>%
   filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
@@ -287,15 +287,14 @@ miamiRds <- roads[miami.base,]
 # Create unioned buffer for major roads
 miamiRds.buffer <- 
   rbind(
-    st_buffer(miamiRds, 2640) %>%
+    st_buffer(miamiRds, 1320) %>%
       mutate(Legend = "Buffer") %>%
       dplyr::select(Legend),
-    st_union(st_buffer(miamiRds, 2640)) %>%
+    st_union(st_buffer(miamiRds, 1320)) %>%
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
 
 # Plot to check buffer
-# Map of Distance to Shore
 ggplot() + geom_sf(data=miami.base) +
   geom_sf(data=st_union(miamiRds.buffer), 
           color = 'red', fill = 'transparent') +
@@ -308,6 +307,13 @@ ggplot() + geom_sf(data=miami.base) +
 # Create 1/2 mile ring buffers
 miami.Rings <- multipleRingBuffer(miamiRds.buffer, 36960, 2640)
 
+# Plot to check ring buffers
+ggplot() + 
+  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
+  geom_sf(data = miami.Rings, fill = "white", alpha = 0.3) +
+  geom_sf(data=miamiRds, color = "gold") +
+  labs(title = "Distances from TOD Area", 
+       subtitle = "1/2 Mile Ring Buffers")
 
 ### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- 
@@ -320,7 +326,7 @@ miamiHomesClean.sf <-
 
 glimpse(miamiHomesClean.sf)
 
-# --- Part 2: Exploratory Analysis ----
+# --- Part 3: Exploratory Analysis ----
 ## Runing a Correlation Matrix to find interesting variables
 miamiHomes.train <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
