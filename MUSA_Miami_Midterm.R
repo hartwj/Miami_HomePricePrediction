@@ -107,45 +107,85 @@ nn_function <- function(measureFrom,measureTo,k) {
   return(output)  
 }
 
-multipleRingBuffer <- function(inputPolygon, maxDistance, interval) {
+multipleRingBuffer <- function(inputPolygon, maxDistance, interval) 
+{
+  #create a list of distances that we'll iterate through to create each ring
   distances <- seq(0, maxDistance, interval)
+  #we'll start with the second value in that list - the first is '0'
   distancesCounter <- 2
+  #total number of rings we're going to create
   numberOfRings <- floor(maxDistance / interval)
+  #a counter of number of rings
   numberOfRingsCounter <- 1
+  #initialize an otuput data frame (that is not an sf)
   allRings <- data.frame()
   
-  while (numberOfRingsCounter <= numberOfRings) {
-    if(distances[distancesCounter] < 0 & distancesCounter == 2){
+  #while number of rings  counteris less than the specified nubmer of rings
+  while (numberOfRingsCounter <= numberOfRings) 
+  {
+    #if we're interested in a negative buffer and this is the first buffer
+    #(ie. not distance = '0' in the distances list)
+    if(distances[distancesCounter] < 0 & distancesCounter == 2)
+    {
+      #buffer the input by the first distance
       buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #different that buffer from the input polygon to get the first ring
       buffer1_ <- st_difference(inputPolygon, buffer1)
+      #cast this sf as a polygon geometry type
       thisRing <- st_cast(buffer1_, "POLYGON")
+      #take the last column which is 'geometry'
       thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      #add a new field, 'distance' so we know how far the distance is for a give ring
       thisRing$distance <- distances[distancesCounter]
     }
     
-    else if(distances[distancesCounter] < 0 & distancesCounter > 2) {
+    
+    #otherwise, if this is the second or more ring (and a negative buffer)
+    else if(distances[distancesCounter] < 0 & distancesCounter > 2) 
+    {
+      #buffer by a specific distance
       buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #create the next smallest buffer
       buffer2 <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      #This can then be used to difference out a buffer running from 660 to 1320
+      #This works because differencing 1320ft by 660ft = a buffer between 660 & 1320.
+      #bc the area after 660ft in buffer2 = NA.
       thisRing <- st_difference(buffer2,buffer1)
+      #cast as apolygon
       thisRing <- st_cast(thisRing, "POLYGON")
+      #get the last field
       thisRing <- as.data.frame(thisRing$geometry)
+      #create the distance field
       thisRing$distance <- distances[distancesCounter]
     }
     
-    else {
+    #Otherwise, if its a positive buffer
+    else 
+    {
+      #Create a positive buffer
       buffer1 <- st_buffer(inputPolygon, distances[distancesCounter])
+      #create a positive buffer that is one distance smaller. So if its the first buffer
+      #distance, buffer1_ will = 0. 
       buffer1_ <- st_buffer(inputPolygon, distances[distancesCounter-1])
+      #difference the two buffers
       thisRing <- st_difference(buffer1,buffer1_)
+      #cast as a polygon
       thisRing <- st_cast(thisRing, "POLYGON")
+      #geometry column as a data frame
       thisRing <- as.data.frame(thisRing[,ncol(thisRing)])
+      #add teh distance
       thisRing$distance <- distances[distancesCounter]
     }  
     
+    #rbind this ring to the rest of the rings
     allRings <- rbind(allRings, thisRing)
+    #iterate the distance counter
     distancesCounter <- distancesCounter + 1
+    #iterate the number of rings counter
     numberOfRingsCounter <- numberOfRingsCounter + 1
   }
   
+  #convert the allRings data frame to an sf data frame
   allRings <- st_as_sf(allRings)
 }
 
@@ -155,12 +195,12 @@ census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 # --- Part 1: Data Wrangling ----
 
-### Reading in Home Price Data & Base Map
+### Reading in Home Price Data & Base Ma
 
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
 
-miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
@@ -294,6 +334,8 @@ miamiRds.buffer <-
       st_sf() %>%
       mutate(Legend = "Unioned Buffer"))
 
+miamiRds.buffer <- filter(miamiRds.buffer, Legend=="Unioned Buffer")
+
 # Plot to check buffer
 ggplot() + geom_sf(data=miami.base) +
   geom_sf(data=st_union(miamiRds.buffer), 
@@ -305,24 +347,30 @@ ggplot() + geom_sf(data=miami.base) +
   scale_colour_viridis()
 
 # Create 1/2 mile ring buffers
-miami.Rings <- multipleRingBuffer(miamiRds.buffer, 36960, 2640)
+miami.rings <- multipleRingBuffer(miamiRds.buffer, 2360*10, 2360)
 
 # Plot to check ring buffers
 ggplot() + 
   geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
-  geom_sf(data = miami.Rings, fill = "white", alpha = 0.3) +
-  geom_sf(data=miamiRds, color = "gold") +
-  labs(title = "Distances from TOD Area", 
-       subtitle = "1/2 Mile Ring Buffers")
+  geom_sf(data = miami.rings, fill = "white", alpha = 0.3) +
+  geom_sf(data=miamiRds, color = "gold", size= 2) +
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore1),
+          show.legend = "line", size= .5) +
+  labs(title = "Distances from Highway and Shoreline", 
+       subtitle = "1/2 Mile Ring Buffers from Highway") +
+  scale_colour_viridis()
+
+miamiHomes.rings <- st_join(miamiHomes.sf, miami.rings, join = st_within) %>%
+  st_sf()
 
 ### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- 
-  miamiHomes.sf %>%
+  miamiHomes.rings %>%
   mutate(Age = saleYear - YearBuilt) %>%
   dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, geometry)
+                MedHHInc, MedRent, pctWhite, pctPoverty, distance, geometry)
 
 glimpse(miamiHomesClean.sf)
 
