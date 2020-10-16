@@ -252,22 +252,21 @@ miamiHomes.sf <- miamiHomes.sf %>%
 ## Cleaning miamiHomes.sf
 miamiHomesClean.sf <- 
   miamiHomes.sf %>%
-  dplyr::select(Folio, SalePrice, Property.Zip, Mailing.Zip, Property.City, AdjustedSqFt,
-                LotSize, Bed, Bath, Stories, YearBuilt, EffectiveYearBuilt,
-                LivingSqFt, ActualSqFt, toPredict, Shore1, GEOID, TotalPop, MedHHInc, MedRent, pctWhite, 
-                pctPoverty, geometry) %>%
-  mutate(Age = 2018 - YearBuilt) %>%
-  mutate(EffectiveAge = 2018 - EffectiveYearBuilt) # I literally could not get this to work without 2018
+  mutate(Age = saleYear - YearBuilt) %>%
+  dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
+                LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
+                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID.x, TotalPop.x, 
+                MedHHInc.x, MedRent.x, pctWhite.x, pctPoverty.x, geometry)
+
+glimpse(miamiHomesClean.sf)
 
 ## Runing a Correlation Matrix to find interesting variables
 miamiHomes.train <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
   filter(toPredict == 0)
-
 miamiHomes.test <- miamiHomesClean.sf %>% 
   st_drop_geometry() %>%
   filter(toPredict == 1)
-
 
 numericVars <- 
   select_if(miamiHomes.train, is.numeric) %>% na.omit()
@@ -284,8 +283,6 @@ ggcorrplot(
 
 
 # --- Part 3. Feature Engineering ----
-
-
 
 cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
 
@@ -358,28 +355,12 @@ fitControl <- trainControl(method = "cv",
                            savePredictions = TRUE)
 
 set.seed(722)
-# crimes.buffer feature added
-# for k-folds CV
-reg.cv1 <- 
-  train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(-Property.Zip, -GEOID, -Mailing.Zip,
-                        -AdjustedSqFt, -YearBuilt, -LivingSqFt,
-                        -toPredict, -TotalPop, -MedHHInc,
-                        -EffectiveAge,-EffectiveYearBuilt), 
-        method = "lm", 
-        trControl = fitControl, 
-        na.action = na.pass)
-
-reg.cv1
-
 #No neighborhoods R2=0.788, MAE=525,277
 
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(-Property.Zip,-Mailing.Zip,
-                        -AdjustedSqFt, -YearBuilt, -LivingSqFt,
-                        -toPredict, -TotalPop, -MedHHInc,
-                        -EffectiveAge,-EffectiveYearBuilt), 
+          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop.x, 
+                        -MedHHInc.x, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.pass)
@@ -387,6 +368,16 @@ reg.cv2 <-
 reg.cv2
 
 #mailing zip R2=0.735, MAE=537,844    GEOID R2=0.796, MAE=523,302  Property zip broke R lol
+
+reg6 <- lm(SalePrice ~ ., data = miami.test %>%
+             dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop.x, 
+                           -MedHHInc.x, -toPredict))
+
+summary(reg6)
+# Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
+# Shore1, GEOID, MedRent, pctWhite, pctPoverty
+# GEOID = .8337, property zip = .99, mailing zip 0.845
+
 
 #starting from scratch, lets build a model
 #our best model was reg.cv2
@@ -869,3 +860,33 @@ foodBev <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>%
 foodBev <- sf::st_read('foodBev.osm', layer = 'points') %>%
   st_as_sf(coords = c("LON", "LAT"), crs = EPSG:3857, agr = "constant") %>% #EPSG:3857 is the projection that most OSM data is in
   st_transform('ESRI:102658')
+
+# Creating buffers for distance to major roads
+MajRoads <- 
+  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
+  st_transform('ESRI:102658') 
+
+miamiRds <- MajRoads[miami.base,]
+
+# Create unioned buffer for major roads
+miamiRds.buffer <- 
+  rbind(
+    st_buffer(miamiRds, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(miamiRds, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+# Plot to check buffer
+ggplot() + 
+  geom_sf(data=st_union(miamiRds.buffer)) +
+  geom_sf(data=miamiRds, 
+          #aes(colour = Line), 
+          show.legend = "point", size= 1) +
+  #scale_colour_manual(values = c("orange","blue")) +
+  labs(title="Miami Major Roads", 
+       subtitle="Miami & Miami Beach") +
+  mapTheme()
+
+miami.Rings <- multipleRingBuffer(buffer, 36960, 5280)
