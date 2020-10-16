@@ -247,7 +247,7 @@ miamiHomes.sf <- miamiHomes.sf %>%
 miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Pool = as.integer(str_detect(XF_all,"pool"))) %>%
   mutate(Fence = as.integer(str_detect(XF_all,"fence"))) %>%
-  mutate(Patio = as.integer(str_detect(XF_all,"Patio")))
+  mutate(Patio = as.integer(str_detect(XF_all,"patio")))
   
 ## Cleaning miamiHomes.sf
 miamiHomesClean.sf <- 
