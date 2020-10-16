@@ -298,14 +298,9 @@ roads <-
 miamiRds <- roads[miami.base,]
 
 # Create unioned buffer for major roads
-miamiRds.buffer <- 
-  rbind(
-    st_buffer(miamiRds, 660) %>%
-      mutate(Legend = "Buffer") %>%
-      dplyr::select(Legend),
-    st_union(st_buffer(miamiRds, 660)) %>%
+miamiRds.buffer <- st_union(st_buffer(miamiRds, 660)) %>%
       st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
+      mutate(Legend = "Unioned Buffer")
 
 miamiRds.buffer <- filter(miamiRds.buffer, Legend=="Unioned Buffer")
 
@@ -319,8 +314,9 @@ ggplot() + geom_sf(data=miami.base) +
   labs(title="Miami Major Roads") +
   scale_colour_viridis()
 
-# Create 1/2 mile ring buffers
-miami.rings <- multipleRingBuffer(miamiRds.buffer, 660*15, 660)
+# Create 1/8 mile ring buffers
+miami.rings <- multipleRingBuffer(miamiRds.buffer, 660*15, 660) %>%
+  rename(road_dist = distance)
 
 # Plot to check ring buffers
 ggplot() + 
@@ -330,7 +326,7 @@ ggplot() +
   geom_sf(data=miamiHomes.sf, aes(colour=Shore1),
           show.legend = "line", size= .5) +
   labs(title = "Distances from Major Roads and Shoreline", 
-       subtitle = "1/2 Mile Ring Buffers from Highway") +
+       subtitle = "1/2 Mile Ring Buffers from Roads") +
   scale_colour_viridis()
 
 # Join home prices with ring buffer
@@ -338,7 +334,49 @@ miamiHomes.rings <- st_join(miamiHomes.sf, miami.rings, join = st_within) %>%
   st_sf() 
 
 # Replace NAs with 0
-miamiHomes.rings[c("distance")][is.na(miamiHomes.rings[c("distance")])] <- 0
+miamiHomes.rings[c("road_dist")][is.na(miamiHomes.rings[c("road_dist")])] <- 0
+
+### Parks
+parks <- 
+  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  filter(TYPE == "Local") %>%
+  st_transform('ESRI:102658') 
+
+parks <- parks[miami.base,]
+
+parks.buffer <- st_union(st_buffer(parks, 660)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer")
+
+park.rings <- multipleRingBuffer(parks.buffer, 660*10, 660) %>%
+  rename(park_dist = distance)
+
+# Join home prices with park ring buffers
+miamiHomes.rings <- st_join(miamiHomes.rings, park.rings, join = st_within) %>%
+  st_sf() 
+
+miamiHomes.rings[c("park_dist")][is.na(miamiHomes.rings[c("park_dist")])] <- 0
+
+# Plot to check park ring buffers
+ggplot() + 
+  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
+  geom_sf(data = park.rings, fill = "white", alpha = 0.3) +
+  geom_sf(data= parks, color = "gold", size= 2) +
+  geom_sf(data= miamiHomes.sf, aes(colour=Shore1),
+          show.legend = "line", size= .5) +
+  labs(title = "Distances from Major Roads and Shoreline", 
+       subtitle = "1/2 Mile Ring Buffers from Roads") +
+  scale_colour_viridis()
+
+### Elementary School Polygons
+# https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson
+
+### Middle School Polygons
+# https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson
+
+### High School Polygons
+# https://opendata.arcgis.com/datasets/9004dbf5f7f645d493bfb6b875a43dc1_0.geojson
 
 ### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- 
@@ -347,7 +385,7 @@ miamiHomesClean.sf <-
   dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, distance, geometry)
+                MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, geometry)
 
 glimpse(miamiHomesClean.sf)
 
@@ -450,7 +488,7 @@ set.seed(732)
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
           dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
-                        -MedHHInc, -toPredict), 
+                        -MedHHInc, -road_dist, -park_dist, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.omit)
