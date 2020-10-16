@@ -363,7 +363,7 @@ reg.cv2 <-
                         -MedHHInc, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
-        na.action = na.pass)
+        na.action = na.omit)
 
 reg.cv2
 
@@ -395,7 +395,11 @@ map_preds <- miamiHomes.test %>%
 #output to CSV
 
 output_preds <- map_preds %>%
-  dplyr::select(pred, folio)
+  dplyr::select(pred, Folio) %>%
+  mutate(team_name = "Florid-API Keys") %>%
+  rename(prediction = pred)
+
+write.csv(output_preds, "Florid-API Keys.csv")
 
 
 
