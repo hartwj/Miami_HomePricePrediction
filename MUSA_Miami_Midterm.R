@@ -372,50 +372,22 @@ ggplot() +
   scale_colour_viridis()
 
 ### School Polygons
-elem <- 
-  st_read("https://opendata.arcgis.com/datasets/19f5d8dcd9714e6fbd9043ac7a50c6f6_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
-  st_transform('ESRI:102658') 
-midsc <- 
+school <- 
   st_read("https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
-  st_transform('ESRI:102658') 
-hs <- 
-  st_read("https://opendata.arcgis.com/datasets/9004dbf5f7f645d493bfb6b875a43dc1_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>% 
+  rename(schoolID = ID)%>%
   st_transform('ESRI:102658') 
 
-miamiHomes.sch <- st_join(miamiHomes.rings, elem[miami.base,], join = st_within) %>%
-  rename(elemID = ID)
+miamiHomes.rings <- st_join(miamiHomes.rings, school[miami.base,], join = st_within)
 
-miamiHomes.sch <- st_join(miamiHomes.sch, midsc[miami.base,], join = st_within) %>%
-  rename(msID = ID)
-
-miamiHomes.sch <- st_join(miamiHomes.sch, hs[miami.base,], join = st_within) %>%
-  rename(hsID = ID)
-
-miamiHomesClean.sf <- 
-  miamiHomes.sch %>%
+### Cleaning miamiHomes.sf for exploratory analyses
+miamiHomesClean.sf <- miamiHomes.rings %>%
   mutate(Age = saleYear - YearBuilt) %>%
-  mutate(elemID = as.integer(elemID)) %>%
-  mutate(msID = as.integer(msID)) %>%
-  mutate(hsID = as.integer(hsID)) %>%
   dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID.x, TotalPop.x, 
                 MedHHInc.x, MedRent.x, pctWhite.x, pctPoverty.x, road_dist, park_dist, 
-                elemID, msID, hsID, geometry) 
-
-
-### Cleaning miamiHomes.sf for exploratory analyses
-miamiHomesClean.sf <- 
-  miamiHomes.rings %>%
-  mutate(Age = saleYear - YearBuilt) %>%
-  dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
-                LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
-                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, 
-                elemID, msID, hsID, geometry)
+                schoolID, geometry) 
 
 glimpse(miamiHomesClean.sf)
 
