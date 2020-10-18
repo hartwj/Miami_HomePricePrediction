@@ -32,7 +32,7 @@ library(jtools)
 library(broom)
 # library(tufte)    #excluding for now..weird errors
 library(readr)
-s
+
 # --- Setup: Aesthetics & Functions ----
 ## Aesthetics
 mapTheme <- function(base_size = 12) {
@@ -198,11 +198,7 @@ census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 # --- Part 1: Data Wrangling ----
 
-### Reading in Home Price Data & Base Map
-# Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
-# JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
-
-miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes <- st_read("studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
