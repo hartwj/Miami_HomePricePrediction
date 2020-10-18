@@ -1,9 +1,6 @@
 
 # --- Setup: Libraries ----
 # Regex parsing package
-library(stringr)
-library(stargazer)
-
 library(tidyverse)
 library(ggplot2)
 library(sf)
@@ -16,6 +13,9 @@ library(mapview)
 library(lubridate)
 library(ggcorrplot)
 library(raster)
+library(stringr)
+library(stargazer)
+library(ggpubr)
 
 library(rgeos)
 library(spdep)
@@ -32,7 +32,7 @@ library(jtools)
 library(broom)
 # library(tufte)    #excluding for now..weird errors
 library(readr)
-
+s
 # --- Setup: Aesthetics & Functions ----
 ## Aesthetics
 mapTheme <- function(base_size = 12) {
@@ -198,18 +198,14 @@ census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
 
 # --- Part 1: Data Wrangling ----
 
-### Reading in Home Price Data & Base Ma
-
+### Reading in Home Price Data & Base Map
 # Julian file path "C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson"
 # JZhou file path "/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson"
 
-miamiHomes <- st_read("C:/Users/12156/Documents/GitHub/Miami/studentsData.geojson")
+miamiHomes <- st_read("/Users/julianazhou/Documents/GitHub/Miami/studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
-
-mapview(miamiHomes.sf[1,])
-glimpse(miamiHomes.sf)
 
 # Specify saleYear as integer
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
@@ -221,49 +217,21 @@ miami.base <-
   filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
   st_union()
 
-# Create border box around Miami base map to pull data from OSM
-xmin = st_bbox(miami.base)[[1]]
-ymin = st_bbox(miami.base)[[2]]
-xmax = st_bbox(miami.base)[[3]]  
-ymax = st_bbox(miami.base)[[4]]
-
-ggplot() +
-  geom_sf(data=miami.base, fill="black") +
-  geom_sf(data=st_as_sfc(st_bbox(miami.base)), colour="red", fill=NA) 
-
-#bars <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>% #fix
-#  add_osm_feature(key = 'amenity', value = c("bar", "pub", "restaurant")) %>%
-#  osmdata_sf()
-
-# --- Part 2: Feature Engineering ----
-
-### Adding shoreline distance
-# Read in shoreline shapefile
+### Read in shoreline shapefile
 shoreline <- st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
   st_transform('ESRI:102658')
 
-# Clip shoreline by base map
+# Clip shoreline by base map & transform to points
 shoreline <- st_intersection(shoreline, miami.base)
-
-# Transform shoreline to points
 shoreline.point <- st_cast(shoreline,"POINT") 
 
-# Creating distance to shore feature
-miamiHomes.sf <- miamiHomes.sf %>%
-  mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
-                              st_coordinates(st_centroid(shoreline.point)),1))
 
-# Map of Distance to Shore
-ggplot() + geom_sf(data=miami.base) + 
-  geom_sf(data=miamiHomes.sf, aes(colour=Shore1)) + 
-  scale_colour_viridis()
-
-### Adding Census data
+### 2018 - 5-Year ACS Data by Census Tract
 tracts <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
                                              "B19013_001E","B25058_001E",
                                              "B06012_002E"), 
-  year=2018, state= 12, county= 086, geometry=T, output="wide") %>%
+          year=2018, state= 12, county= 086, geometry=T, output="wide") %>%
   st_transform('ESRI:102658') %>%
   rename(TotalPop = B25026_001E, 
          Whites = B02001_002E,
@@ -275,9 +243,40 @@ tracts <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
-miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
+### Highways & Major Road Data
+roads <- 
+  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
+  filter(CLASS == c('1','2')) %>%
+  st_transform('ESRI:102658') 
 
-### Parsing XF variables
+miamiRds <- roads[miami.base,]
+
+
+### Local Park Data
+parks <- 
+  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
+  filter(TYPE == "Local") %>%
+  st_transform('ESRI:102658') 
+
+parks <- parks[miami.base,]
+
+
+### Middle School
+midschool <- 
+  st_read("https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson") %>%
+  filter(CITY == "Miami Beach" | CITY == "Miami") %>% 
+  rename(midschoolID = ID)%>%
+  st_transform('ESRI:102658') 
+
+midschool <- midschool[miami.base,]
+
+miamiHomes.rings <- st_join(miamiHomes.rings, midschool, join = st_within)
+
+
+# --- Part 2: Feature Engineering ----
+
+### Parsing XF variables (i.e., Pool/Fence/Patio)
 # Make all XF# text lowercase and combine into one string variable
 miamiHomes.sf <- miamiHomes.sf %>%
   mutate(XF1 = tolower(XF1)) %>%
@@ -290,69 +289,40 @@ miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Pool = as.integer(str_detect(XF_all,"pool"))) %>%
   mutate(Fence = as.integer(str_detect(XF_all,"fence"))) %>%
   mutate(Patio = as.integer(str_detect(XF_all,"patio")))
-  
-### Distance from Major Roads buffer
-# Creating buffers for distance to major roads
-roads <- 
-  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
-  filter(CLASS == c('1','2')) %>%
-  st_transform('ESRI:102658') 
 
-miamiRds <- roads[miami.base,]
 
-# Create unioned buffer for major roads
+### Adding shoreline distance
+# Creating distance to shore feature
+miamiHomes.sf <- miamiHomes.sf %>%
+  mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
+                              st_coordinates(st_centroid(shoreline.point)),1))
+
+miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
+miamiHomes.sf$Shore.mile <- miamiHomes.sf$Shore1/5280
+
+### Major Roads: 1/8 mile ring buffers
+# Create unioned buffer for major roads in Miami & Miami Beach
 miamiRds.buffer <- st_union(st_buffer(miamiRds, 660)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer")
-
+  st_sf() %>%
+  mutate(Legend = "Unioned Buffer")
 miamiRds.buffer <- filter(miamiRds.buffer, Legend=="Unioned Buffer")
-
-# Plot to check buffer
-ggplot() + geom_sf(data=miami.base) +
-  geom_sf(data=st_union(miamiRds.buffer), 
-          color = 'red', fill = 'transparent') +
-  geom_sf(data=miamiHomes.sf, aes(colour=Shore1),
-          show.legend = "line", size= .5) +
-  #scale_colour_manual(values = c("orange","blue")) +
-  labs(title="Miami Major Roads") +
-  scale_colour_viridis()
 
 # Create 1/8 mile ring buffers
 miami.rings <- multipleRingBuffer(miamiRds.buffer, 660*15, 660) %>%
   rename(road_dist = distance)
 
-# Plot to check ring buffers
-ggplot() + 
-  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
-  geom_sf(data = miami.rings, fill = "white", alpha = 0.3) +
-  geom_sf(data=miamiRds, color = "gold", size= 2) +
-  geom_sf(data=miamiHomes.sf, aes(colour=Shore1),
-          show.legend = "line", size= .5) +
-  labs(title = "Distances from Major Roads and Shoreline", 
-       subtitle = "1/2 Mile Ring Buffers from Roads") +
-  scale_colour_viridis()
-
-# Join home prices with ring buffer
+# Join home prices with ring buffer -- transform NAs to 0
 miamiHomes.rings <- st_join(miamiHomes.sf, miami.rings, join = st_within) %>%
   st_sf() 
-
-# Replace NAs with 0
 miamiHomes.rings[c("road_dist")][is.na(miamiHomes.rings[c("road_dist")])] <- 0
 
-### Parks
-parks <- 
-  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
-  filter(TYPE == "Local") %>%
-  st_transform('ESRI:102658') 
 
-parks <- parks[miami.base,]
-
+### Parks - 1/8 ring buffers
 parks.buffer <- st_union(st_buffer(parks, 660)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer")
+  st_sf() %>%
+  mutate(Legend = "Unioned Buffer")
 
-park.rings <- multipleRingBuffer(parks.buffer, 660*10, 660) %>%
+park.rings <- multipleRingBuffer(parks.buffer, 660*8, 660) %>%
   rename(park_dist = distance)
 
 # Join home prices with park ring buffers
@@ -361,36 +331,165 @@ miamiHomes.rings <- st_join(miamiHomes.rings, park.rings, join = st_within) %>%
 
 miamiHomes.rings[c("park_dist")][is.na(miamiHomes.rings[c("park_dist")])] <- 0
 
-# Plot to check park ring buffers
-ggplot() + 
-  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
-  geom_sf(data = park.rings, fill = "white", alpha = 0.3) +
-  geom_sf(data= parks, color = "gold", size= 2) +
-  geom_sf(data= miamiHomes.sf, aes(colour=Shore1),
-          show.legend = "line", size= .5) +
-  labs(title = "Distances from Major Roads and Shoreline", 
-       subtitle = "1/2 Mile Ring Buffers from Roads") +
-  scale_colour_viridis()
-
-### School Polygons
-school <- 
-  st_read("https://opendata.arcgis.com/datasets/dd2719ff6105463187197165a9c8dd5c_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>% 
-  rename(schoolID = ID)%>%
-  st_transform('ESRI:102658') 
-
-miamiHomes.rings <- st_join(miamiHomes.rings, school[miami.base,], join = st_within)
 
 ### Cleaning miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- miamiHomes.rings %>%
-  mutate(Age = 2018 - YearBuilt) %>%
-  dplyr::select(Folio, SalePrice, Property.City, AdjustedSqFt,
-                LotSize, Bed, Bath, Stories, Pool, Fence, Patio, LivingSqFt, ActualSqFt, 
+  mutate(Age = saleYear - YearBuilt) %>%
+  dplyr::select(Folio, SalePrice, Property.City,
+                LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
                 MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, 
-                schoolID, geometry) 
+                midschoolID, geometry) 
 
-glimpse(miamiHomesClean.sf)
+# --- Markdown: Introduction ----
+
+
+
+# --- Markdown: Data ----
+trainprice.sf <- miamiHomesClean.sf %>% 
+  filter(toPredict == 0)
+
+# Map Home Prices
+allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
+  st_sf()
+
+allprices.sf$SalePrice[allprices.sf$SalePrice == 0] <- NA   
+
+allprices.sf$SalePrice <- ifelse(is.na(allprices.sf$SalePrice), 
+                                 allprices.sf$pred, allprices.sf$SalePrice)
+
+# All Home Prices (Predicted and Training)
+ggplot() + 
+  geom_sf(data=miami.base) + 
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  labs(title = "Home Prices",
+       subtitle = "Miami & Miami Beach, FL",
+       caption = "Figure 1.0") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95)
+
+# Map of Predicted Home Prices vs. Training
+tst <- ggplot() + 
+  geom_sf(data=miami.base) + 
+  geom_sf(data=map_preds, aes(color=pred),
+          show.legend = "line", size = 1) + 
+  labs(title = "Predicted Home Prices",
+       caption = "Figure 1.1") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97)
+trn <- ggplot() + 
+  geom_sf(data=miami.base) + 
+  geom_sf(data=trainprice.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  labs(title = "Training Set Sale Prices",
+       caption = "Figure 1.2") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97) 
+ggarrange(tst, trn + rremove("x.text"), ncol = 2, nrow = 1, 
+          common.legend = TRUE, legend = "right")
+
+# Map of Distance to Shore
+ggplot() + 
+  geom_sf(data=miami.base) + 
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore.mile),
+          show.legend = "line", size= 1) + 
+  labs(title = "Distance from Shoreline",
+       caption = "Figure 2.0") +
+  scale_colour_viridis(name = "Distance (miles)")
+
+### Middle School Areas
+# Retrieve coordinates for school labels
+midschool.pts <- sf::st_point_on_surface(midschool)
+midschool.coords <- as.data.frame(sf::st_coordinates(midschool.pts))
+midschool.coords$NAME <- midschool$NAME
+
+# Map of Middle School Areas
+ggplot() + 
+  geom_sf(data = miami.base, fill = "lightgray", lwd = .5) +
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  geom_sf(data = midschool, fill = "#d3e9ff", alpha =.4, color = "#498cd3", lwd = .8)+
+  geom_text(data = midschool.coords, aes(X, Y, label = NAME), size = 3) +
+  labs(title = "Middle Schools & Home Prices",
+       caption = "Figure 2.1") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97) 
+
+# Plot to check road ring buffers -- Don't think we need, since it wasn't relevant
+ggplot() + 
+  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
+  geom_sf(data = miami.rings, fill = "transparent") +
+  geom_sf(data=miamiHomes.sf, color='#0000CC', size= .8) +
+  geom_sf(data=miamiRds, color = "gold", size= 2) +
+  labs(title = "Distance from Major Roads",
+       subtitle = "1/8 Mile Increments",
+       caption = "Figure 2.1") 
+
+# Plot to check park ring buffers -- Don't think we need, since it wasn't relevant
+ggplot() + 
+  geom_sf(data = miami.base, fill = "lightgray", lwd = 1) +
+  geom_sf(data=miamiHomes.sf, color='#0000CC', size= .8) +
+  geom_sf(data = park.rings, fill = "transparent", alpha = 0.1) +
+  geom_sf(data=parks, color = "gold", size= 2) +
+  labs(title = "Distance from Park",
+       subtitle = "1/8 Mile Increments",
+       caption = "Figure 2.2")
+
+
+# --- Markdown: Method ----
+
+
+# --- Markdown: Results ----
+
+
+# --- Part 3: Exploratory Analysis ----
+## Runing a Correlation Matrix to find interesting variables
+miamiHomes.train <- miamiHomesClean.sf %>% 
+  filter(toPredict == 0) %>%
+  filter(SalePrice <= 1000000)
+miamiHomes.test <- miamiHomesClean.sf %>% 
+  filter(toPredict == 1)
+
+numericVars <- 
+  select_if(miamiHomes.train, is.numeric) %>% na.omit()
+
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across numeric variables") 
+
+
+cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
+
+hist(miamiHomes.train$SalePrice)
+ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# --- END HERE! ----
 
 # --- Part 3: Exploratory Analysis ----
 ## Runing a Correlation Matrix to find interesting variables
