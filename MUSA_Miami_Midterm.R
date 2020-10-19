@@ -314,6 +314,74 @@ miamiHomesClean.sf <- miamiHomes.sf %>%
                 JosedeDiego.MS, GeorgiaJA.MS, KinlochPk.MS, Madison.MS, Nautilus.MS, 
                 Shenandoah.MS, WestMiami.MS, geometry) 
 
+
+# --- Part 3: Exploratory Analysis ----
+## Runing a Correlation Matrix to find interesting variables
+miamiHomes.train <- miamiHomesClean.sf %>% 
+  filter(toPredict == 0) %>%
+  filter(SalePrice <= 1000000)
+miamiHomes.test <- miamiHomesClean.sf %>% 
+  filter(toPredict == 1)
+
+numericVars <- 
+  select_if(miamiHomes.train, is.numeric) %>% na.omit()
+
+
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across numeric variables") 
+
+
+
+cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
+
+hist(miamiHomes.train$SalePrice)
+ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+## Univarite Regression
+Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+  dplyr::select(Shore1, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, schoolID))
+
+Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+             dplyr::select(-GEOID))
+
+summary(Reg1)
+summary(Reg2)
+summ(Reg1)
+
+stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
+
+
+
+#GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
+
+# -----Part 4 - Train/Test Split -----------
+
+
+# set random seed
+set.seed(3171)
+
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = miamiHomes.train$SalePrice, 
+  p = .60, list = FALSE)
+# split data into training and test
+miami.training <- miamiHomes.train[inTrain,] 
+miami.test     <- miamiHomes.train[-inTrain,]  
+
+
+reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
+             dplyr::select(-GEOID))
+
+summary(reg2_split)
+
+
 # --- Markdown: Introduction ----
 
 
@@ -434,101 +502,8 @@ ggplot() +
 # --- Markdown: Results ----
 
 
-# --- Part 3: Exploratory Analysis ----
-## Runing a Correlation Matrix to find interesting variables
-miamiHomes.train <- miamiHomesClean.sf %>% 
-  filter(toPredict == 0) %>%
-  filter(SalePrice <= 1000000)
-miamiHomes.test <- miamiHomesClean.sf %>% 
-  filter(toPredict == 1)
 
-numericVars <- 
-  select_if(miamiHomes.train, is.numeric) %>% na.omit()
-
-
-ggcorrplot(
-  round(cor(numericVars), 1), 
-  p.mat = cor_pmat(numericVars),
-  colors = c("#25CB10", "white", "#FA7800"),
-  type="lower",
-  insig = "blank") +  
-  labs(title = "Correlation across numeric variables") 
-
-
-cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
-
-hist(miamiHomes.train$SalePrice)
-ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-# --- END HERE! ----
-
-# --- Part 3: Exploratory Analysis ----
-## Runing a Correlation Matrix to find interesting variables
-miamiHomes.train <- miamiHomesClean.sf %>% 
-  filter(toPredict == 0) %>%
-  filter(SalePrice <= 1000000)
-miamiHomes.test <- miamiHomesClean.sf %>% 
-  filter(toPredict == 1)
-
-numericVars <- 
-  select_if(miamiHomes.train, is.numeric) %>% na.omit()
-
-
-ggcorrplot(
-  round(cor(numericVars), 1), 
-  p.mat = cor_pmat(numericVars),
-  colors = c("#25CB10", "white", "#FA7800"),
-  type="lower",
-  insig = "blank") +  
-  labs(title = "Correlation across numeric variables") 
-
-
-
-cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
-
-hist(miamiHomes.train$SalePrice)
-ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-## Univarite Regression
-Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-  dplyr::select(Shore1, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, schoolID))
-
-Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-             dplyr::select(-GEOID))
-
-summary(Reg1)
-summary(Reg2)
-summ(Reg1)
-
-stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
-
-
-
-#GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
-
-# -----Part 4 - Train/Test Split -----------
-
-
-# set random seed
-set.seed(3171)
-
-# get index for training sample
-inTrain <- caret::createDataPartition(
-  y = miamiHomes.train$SalePrice, 
-  p = .60, list = FALSE)
-# split data into training and test
-miami.training <- miamiHomes.train[inTrain,] 
-miami.test     <- miamiHomes.train[-inTrain,]  
-
-
-reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
-             dplyr::select(-GEOID))
-
-summary(reg2_split)
+# --- JZ END HERE! ----
 
 
 ##---------------------- Calculating MAE and MAPE for a single test test
