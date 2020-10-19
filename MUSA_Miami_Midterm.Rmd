@@ -217,6 +217,14 @@ miamiHomes.sf <- miamiHomes %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
 
+### Read in base map
+miami.base <- 
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
+  st_transform('ESRI:102658') %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+
 xmin = st_bbox(miami.base)[[1]]
 ymin = st_bbox(miami.base)[[2]]
 xmax = st_bbox(miami.base)[[3]]  
@@ -228,12 +236,6 @@ bbox = c(xmin, ymin, xmax, ymax)
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
 miamiHomes.sf$ID <- seq.int(nrow(miamiHomes.sf))
 
-### Read in base map
-miami.base <- 
-  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
-  st_transform('ESRI:102658') %>%
-  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
-  st_union()
 
 ### Read in shoreline shapefile
 shoreline <- st_read('https://opendata.arcgis.com/datasets/58386199cc234518822e5f34f65eb713_0.geojson') %>% 
@@ -306,15 +308,15 @@ miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'ID')
 
 # Rename dummies
 miamiHomes.sf <- miamiHomes.sf %>%
-  rename(Brownsville.MS = NAMEBrownsville.Middle) %>%
-  rename(CitrusGrove.MS = NAMECitrus.Grove.Middle) %>%
-  rename(JosedeDiego.MS = NAMEde.Diego..Jose.Middle) %>%
-  rename(GeorgiaJA.MS = NAMEJones.Ayers..Georgia.Middle) %>%
-  rename(KinlochPk.MS = NAMEKinloch.Park.Middle) %>%
-  rename(Madison.MS = NAMEMadison.Middle) %>%
-  rename(Nautilus.MS = NAMENautilus.Middle) %>%
-  rename(Shenandoah.MS = NAMEShenandoah.Middle) %>%
-  rename(WestMiami.MS = NAMEWest.Miami.Middle) 
+  rename(Brownsville.MS = contains("Brownsville.Middle")) %>%
+  rename(CitrusGrove.MS = contains("Citrus.Grove.Middle")) %>%
+  rename(JosedeDiego.MS = contains("de.Diego..Jose.Middle")) %>%
+  rename(GeorgiaJA.MS = contains("Jones.Ayers..Georgia.Middle")) %>%
+  rename(KinlochPk.MS = contains("Kinloch.Park.Middle")) %>%
+  rename(Madison.MS = contains("Madison.Middle")) %>%
+  rename(Nautilus.MS = contains("Nautilus.Middle")) %>%
+  rename(Shenandoah.MS = contains("Shenandoah.Middle")) %>%
+  rename(WestMiami.MS = contains("West.Miami.Middle")) 
 
 
 ### Calculating shoreline distance
@@ -512,13 +514,13 @@ output_preds <- map_preds %>%
 
 write.csv(output_preds, "Florid-API Keys.csv")
 
-
+```
 
 #our best model was reg.cv2
 
 # --- Markdown: Introduction ----
 
-
+```{r Introductory Maps}
 
 # --- Markdown: Data ----
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -611,7 +613,10 @@ ggplot() +
                       breaks=c(0, 250000, 500000, 750000, 1000000),
                       direction = -1,
                       na.value = .97) 
+```
 
+
+```{r Summary Statistics}
 
 #Summary Statistics Table
 sumstat.df <- miamiHomes.train %>%
@@ -675,11 +680,14 @@ d <- ggplot(trainprice.sf, aes(y=SalePrice, x = Age)) +
 
 ggarrange(a,b,c,d, ncol = 2, nrow = 2)
 
+```
 # --- Markdown: Method ----
 
 
 # --- Markdown: Results ----
 
+
+```{r Spatial Correlation of Errors}
 # Is there a spatial correlation of errors?
 
 # get index for training sample
@@ -758,7 +766,10 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
        caption="Public Policy Analytics, Figure 6.8") +
   plotTheme()
 
+```
 
+
+```{r Map of Neighborhood and MAPEs}
 #Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
 PredictMap <-
@@ -810,6 +821,10 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
      xlab = "Mean Price",
      ylab = "Mean MAE")
 
+
+```
+
+```{r Generalizability of Income}
 #Testing Generalizability of Median Household Income Split
 
 median(as.numeric(miami.test$MedHHInc), na.rm=TRUE)
