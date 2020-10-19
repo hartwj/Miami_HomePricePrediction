@@ -728,8 +728,9 @@ miami.test.lag <- drop_na(miami.test)
 coords.test <- st_coordinates(st_centroid(miami.test.lag))
 neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
-miami.test$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
+miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 
+#this is breaking because of annotation_map & geom_sf miami base
 rmggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
