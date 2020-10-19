@@ -1,4 +1,5 @@
 
+```{r }
 # --- Setup: Libraries ----
 # Regex parsing package
 library(tidyverse)
@@ -333,8 +334,10 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 
 ## Methods--------
-#-----Markdown The first regression we combined our feature engineering variables to see which were statistically significant
-#-----Markdown the second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
+```
+```{r Markdown The first regression we combined our feature engineering variables to see which were statistically significant}
+```
+```{r Markdown the second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2}
 
 
 Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
@@ -357,8 +360,10 @@ stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html"
 
 #GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
 
-# -----Part 4 - Train/Test Split -----------
-#-------Markdown: Same features as are 2nd model, but similar R2 showing that its generalizable with a simple test train split
+```
+```{r Part 4 - Train/Test Split }
+```
+```{r Markdown: Same features as are 2nd model, but similar R2 showing that its generalizable with a simple test train split}
 
 # set random seed
 set.seed(31711)
@@ -379,7 +384,8 @@ reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
 
 summary(reg2_split)
 
-##---------------------- Calculating MAE and MAPE for a single test test
+```
+```{r - Calculating MAE and MAPE for a single test test}
 
 mape <- function(actual,pred){
   mape <- mean(abs((actual - pred)/actual))*100
@@ -398,7 +404,8 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
 #The neighborhood variables clearly make our model better, but could still be overfitting
 
 
-# --------K Fold Cross Validation --------------------
+```
+```{r K Fold Cross Validation }
 
 fitControl <- trainControl(method = "cv", 
                            number = 100,
@@ -455,7 +462,8 @@ ggplot(regCV2plot,aes(obs,pred)) +
 
 
 
-#---------Outputting our CV predictions to CV--------------
+```
+```{r Outputting our CV predictions to CV}
 
 # Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
 # Shore1, GEOID, MedRent, pctWhite, pctPoverty
@@ -822,8 +830,13 @@ print(kable(miamiRichLM$results))
 
 
 rmarkdown::render("MUSA_Miami_Midterm.R")
+```
 
 
 
+---
+title: MUSA_Miami_Midterm.R
+author: julianazhou
+date: '2020-10-19'
 
-
+---
