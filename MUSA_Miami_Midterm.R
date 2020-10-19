@@ -781,10 +781,9 @@ miamiRichLM <-
 
 miamiRichLM
 
-#Providing Results of Cross Validation Test
-reg.cv2$results %>%
-  knitr::kable()
 
+print(kable(miamiPoorLM$results))
+print(kable(miamiRichLM$results))
 
 
 
