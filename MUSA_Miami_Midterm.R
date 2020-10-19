@@ -800,15 +800,4 @@ print(kable(miamiRichLM$results))
 
 
 
-### The key question to be able to answer from this is:
-
-# Which model better captures the spatial process of home sales prices and why?
-
-# model coefficents for each Neighborhood
-tidy(reg.nhood) %>% 
-  filter(str_detect(term, "Name")) %>% 
-  kable() %>% 
-  kable_styling()
-
-
 
