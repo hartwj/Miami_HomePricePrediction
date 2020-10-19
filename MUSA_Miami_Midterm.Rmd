@@ -45,6 +45,7 @@ library(osmdata)
 library(grid)
 library(gridExtra)
 library(ggstance)
+library(ggspatial)
 library(jtools)     
 library(broom)
 # library(tufte)    #excluding for now..weird errors
@@ -420,6 +421,7 @@ reg2MAPE <- mape(miami.test$SalePrice,predict(reg2_split))
 
 cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)) %>%
   knitr::kable()
+  
 
 
 
@@ -520,7 +522,7 @@ write.csv(output_preds, "Florid-API Keys.csv")
 
 # --- Markdown: Introduction ----
 
-```{r Introductory Maps}
+```{r Introductory Maps NONE OF THESE CHARTS WORKED FOR ME - JH}
 
 # --- Markdown: Data ----
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -583,6 +585,7 @@ ggarrange(tst, trn, ncol = 2, nrow = 1,
           common.legend = TRUE, legend = "right")
 
 # Map of Distance to Shore
+# runs without annotion_map_tile
 ggplot() + 
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
@@ -731,9 +734,7 @@ spatialWeights.test <- nb2listw(neighborList.test, style="W")
 miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 
 #this is breaking because of annotation_map & geom_sf miami base
-rmggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
+ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
   geom_point(colour = "#FA7800") +
   geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
   labs(title = "Price as a function of the spatial lag of price",
@@ -753,7 +754,7 @@ ggplot(miami.test.lag, aes(x=lagPriceError, y=SalePrice)) +
 
 
 #Moran's I Test
-moranTest <- moran.mc(miami.test$SalePrice.AbsError, 
+moranTest <- moran.mc(miami.test.lag$SalePrice.AbsError, 
                       spatialWeights.test, nsim = 999, na.action=na.exclude)
 
 ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
@@ -838,7 +839,7 @@ miamiRich <- miami.test %>%
 miamiPoorLM <- 
   train(SalePrice ~ ., data = miamiPoor %>%
           st_drop_geometry() %>%
-          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+          dplyr::select(-ActualSqFt, -TotalPop, 
                         -MedHHInc, -toPredict,
                         -Regression, -SalePrice.Predict, -SalePrice.Error, -SalePrice.AbsError, -SalePrice.APE), 
         method = "lm", 
@@ -850,7 +851,7 @@ miamiPoorLM
 miamiRichLM <- 
   train(SalePrice ~ ., data = miamiRich %>%
           st_drop_geometry() %>%
-          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+          dplyr::select(-ActualSqFt, -TotalPop, 
                         -MedHHInc, -toPredict,
                         -Regression, -SalePrice.Predict, -SalePrice.Error, -SalePrice.AbsError, -SalePrice.APE), 
         method = "lm", 
