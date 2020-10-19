@@ -1,3 +1,16 @@
+---
+title: "MUSA508 Midterm: Miami Home Price Prediction Markdown"
+author: "Julian Hartwell & Juliana Zhou"
+date: "October 19, 2020"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
 
 ```{r }
 # --- Setup: Libraries ----
@@ -203,6 +216,13 @@ miamiHomes <- st_read("studentsData.geojson")
 miamiHomes.sf <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
+
+xmin = st_bbox(miami.base)[[1]]
+ymin = st_bbox(miami.base)[[2]]
+xmax = st_bbox(miami.base)[[3]]  
+ymax = st_bbox(miami.base)[[4]]
+
+bbox = c(xmin, ymin, xmax, ymax)
 
 # Specify saleYear as integer
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
@@ -521,7 +541,7 @@ ggplot() +
           show.legend = "line", size = 1) + 
   labs(title = "Home Prices",
        subtitle = "Miami & Miami Beach, FL",
-       caption = "Figure 1.0") +
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
                       name = "Price ($)", 
                       limits=c(10000,1000000),
@@ -529,8 +549,7 @@ ggplot() +
                       direction = -1,
                       begin = 0,
                       end = .95,
-                      na.value = .95)
-  
+                      na.value = .95) 
 
 # Map of Predicted Home Prices vs. Training
 tst <- ggplot() + 
@@ -538,8 +557,7 @@ tst <- ggplot() +
   geom_sf(data=miami.base, fill='transparent') + 
   geom_sf(data=map_preds, aes(color=pred),
           show.legend = "line", size = 1) + 
-  labs(title = "Predicted Home Prices",
-       caption = "Figure 1.1") +
+  labs(title = "Predicted Home Prices") +
   scale_color_viridis(option="C", 
                       name = "Price ($)", 
                       limits=c(10000,1000000),
@@ -552,7 +570,7 @@ trn <- ggplot() +
   geom_sf(data=trainprice.sf, aes(color=SalePrice),
           show.legend = "line", size = 1) + 
   labs(title = "Training Set Sale Prices",
-       caption = "Figure 1.2") +
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
                       name = "Price ($)", 
                       limits=c(10000,1000000),
@@ -569,7 +587,7 @@ ggplot() +
   geom_sf(data=miamiHomes.sf, aes(colour=Shore.mile),
           show.legend = "line", size= 1) + 
   labs(title = "Distance from Shoreline",
-       caption = "Figure 2.0") +
+       caption = "\U00a9 OpenStreetMap contributors") +
   scale_colour_viridis(name = "Distance (miles)")
 
 ### Middle School Areas
@@ -580,20 +598,20 @@ midschool.coords$NAME <- midschool$NAME
 
 # Map of Middle School Areas
 ggplot() + 
-  annotation_map_tile("cartolight") +
+  annotation_map_tile(type = 'cartolight', progress = 'none') +
   geom_sf(data=miami.base, fill='transparent') + 
   geom_sf(data=allprices.sf, aes(color=SalePrice),
           show.legend = "line", size = 1) + 
   geom_sf(data = midschool, fill = "#d3e9ff", alpha =.4, color = "#498cd3", lwd = .8)+
-  geom_text(data = midschool.coords, aes(X, Y, label = NAME), size = 3) +
   labs(title = "Middle Schools & Home Prices",
-       caption = "Figure 2.1") +
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
                       name = "Price ($)", 
                       limits=c(10000,1000000),
                       breaks=c(0, 250000, 500000, 750000, 1000000),
                       direction = -1,
                       na.value = .97) 
+
 
 #Summary Statistics Table
 sumstat.df <- miamiHomes.train %>%
@@ -605,7 +623,8 @@ sumstat.df <- miamiHomes.train %>%
                 Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
                 KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
 
-print(stargazer(sumstat))
+stargazer(sumstat.df, title="Summary Statistics", type='html', 
+          summary.stat = c('n','mean','sd','min','max'), out='Summary_Statistics.htm')
 
 ###Correlation Matrix
 # Create a new subset of the training data with geometry dropped
@@ -831,12 +850,3 @@ print(kable(miamiRichLM$results))
 
 rmarkdown::render("MUSA_Miami_Midterm.R")
 ```
-
-
-
----
-title: MUSA_Miami_Midterm.R
-author: julianazhou
-date: '2020-10-19'
-
----
