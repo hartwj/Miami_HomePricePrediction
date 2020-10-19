@@ -16,12 +16,11 @@ library(raster)
 library(stringr)
 library(stargazer)
 library(ggpubr)
-library(caret) # for creating dummies using one hot encoding
+library(caret) 
 
 library(rgeos)
 library(spdep)
 library(geosphere)
-library(caret)
 library(ckanr)
 library(FNN)
 library(geosphere)
@@ -34,7 +33,7 @@ library(broom)
 # library(tufte)    #excluding for now..weird errors
 library(readr)
 
-# --- Setup: Aesthetics & Functions ----
+# --- Setup: Aesthetics ----
 ## Aesthetics
 mapTheme <- function(base_size = 12) {
   theme(
@@ -89,8 +88,7 @@ qBr <- function(df, variable, rnd) {
 
 q5 <- function(variable) {as.factor(ntile(variable, 5))}
 
-## Functions
-
+# --- Setup: Functions ----
 
 nn_function <- function(measureFrom,measureTo,k) {
   measureFrom_Matrix <- as.matrix(measureFrom)
@@ -194,10 +192,8 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 }
 
 
-## Load census API key
-census_api_key("dc04d127e79099d0fa300464507544280121fc3b", overwrite = TRUE)
-
 # --- Part 1: Data Wrangling ----
+## Load census API key
 
 miamiHomes <- st_read("studentsData.geojson")
 miamiHomes.sf    <- miamiHomes %>% 
@@ -206,6 +202,7 @@ miamiHomes.sf    <- miamiHomes %>%
 
 # Specify saleYear as integer
 miamiHomes.sf$saleYear <- as.integer(miamiHomes.sf$saleYear)
+miamiHomes.sf$ID <- seq.int(nrow(miamiHomes.sf))
 
 ### Read in base map
 miami.base <- 
@@ -275,13 +272,13 @@ miamiSchools.sf <- st_join(miamiHomes.sf, midschool, join = st_within)
 
 sch_dmy.df <- miamiSchools.sf %>%
   st_drop_geometry() %>%
-  dplyr::select(Folio, NAME) 
+  dplyr::select(Folio, NAME, ID) 
 
 dmy <- dummyVars(" ~ .", data = sch_dmy.df)
 school.dummies<- data.frame(predict(dmy, newdata = sch_dmy.df))
 
 # Join dummies to miamiHomes.sf
-miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'Folio')
+miamiSchools.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'Folio')
 
 # Rename dummies
 miamiHomes.sf <- miamiHomes.sf %>%
