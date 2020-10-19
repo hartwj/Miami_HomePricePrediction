@@ -193,10 +193,9 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 
 
 # --- Part 1: Data Wrangling ----
-## Load census API key
 
 miamiHomes <- st_read("studentsData.geojson")
-miamiHomes.sf    <- miamiHomes %>% 
+miamiHomes.sf <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
   st_transform('ESRI:102658')
 
@@ -272,25 +271,25 @@ miamiSchools.sf <- st_join(miamiHomes.sf, midschool, join = st_within)
 
 sch_dmy.df <- miamiSchools.sf %>%
   st_drop_geometry() %>%
-  dplyr::select(Folio, NAME, ID) 
+  dplyr::select(ID, NAME) 
 
 dmy <- dummyVars(" ~ .", data = sch_dmy.df)
 school.dummies<- data.frame(predict(dmy, newdata = sch_dmy.df))
 
 # Join dummies to miamiHomes.sf
-miamiSchools.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'Folio')
+miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'ID')
 
 # Rename dummies
 miamiHomes.sf <- miamiHomes.sf %>%
-  rename(Brownsville.MS = NAME.Brownsville.Middle) %>%
-  rename(CitrusGrove.MS = NAME.Citrus.Grove.Middle) %>%
-  rename(JosedeDiego.MS = NAME.de.Diego..Jose.Middle) %>%
-  rename(GeorgiaJA.MS = NAME.Jones.Ayers..Georgia.Middle) %>%
-  rename(KinlochPk.MS = NAME.Kinloch.Park.Middle) %>%
-  rename(Madison.MS = NAME.Madison.Middle) %>%
-  rename(Nautilus.MS = NAME.Nautilus.Middle) %>%
-  rename(Shenandoah.MS = NAME.Shenandoah.Middle) %>%
-  rename(WestMiami.MS = NAME.West.Miami.Middle) 
+  rename(Brownsville.MS = NAMEBrownsville.Middle) %>%
+  rename(CitrusGrove.MS = NAMECitrus.Grove.Middle) %>%
+  rename(JosedeDiego.MS = NAMEde.Diego..Jose.Middle) %>%
+  rename(GeorgiaJA.MS = NAMEJones.Ayers..Georgia.Middle) %>%
+  rename(KinlochPk.MS = NAMEKinloch.Park.Middle) %>%
+  rename(Madison.MS = NAMEMadison.Middle) %>%
+  rename(Nautilus.MS = NAMENautilus.Middle) %>%
+  rename(Shenandoah.MS = NAMEShenandoah.Middle) %>%
+  rename(WestMiami.MS = NAMEWest.Miami.Middle) 
 
 
 ### Calculating shoreline distance
@@ -304,15 +303,17 @@ miamiHomes.sf$Shore.mile <- miamiHomes.sf$Shore1/5280
 ### Create home Age variable and clean miamiHomes.sf for exploratory analyses
 miamiHomesClean.sf <- miamiHomes.sf %>%
   mutate(Age = saleYear - YearBuilt) %>%
-  dplyr::select(Folio, SalePrice, Property.City,
+  dplyr::select(ID, Folio, SalePrice, Property.City,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, 
-                YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, Brownsville.MS, CitrusGrove.MS, 
-                JosedeDiego.MS, GeorgiaJA.MS, KinlochPk.MS, Madison.MS, Nautilus.MS, 
-                Shenandoah.MS, WestMiami.MS, geometry) 
+                Age, toPredict, Shore1, GEOID, MedRent, pctWhite, pctPoverty, 
+                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
+                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS, geometry) 
 
 
 # --- Part 3: Exploratory Analysis ----
+
+
+
 ## Runing a Correlation Matrix to find interesting variables
 miamiHomes.train <- miamiHomesClean.sf %>% 
   filter(toPredict == 0) %>%
@@ -320,18 +321,24 @@ miamiHomes.train <- miamiHomesClean.sf %>%
 miamiHomes.test <- miamiHomesClean.sf %>% 
   filter(toPredict == 1)
 
-numericVars <- 
-  select_if(miamiHomes.train, is.numeric) %>% na.omit()
-
+# Create a new subset of the training data with geometry dropped
+numericVars <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 0) %>%
+  filter(SalePrice <= 1000000) %>%
+  dplyr::select(-ID) %>%
+  select_if(is.numeric) %>% 
+  na.omit()
 
 ggcorrplot(
   round(cor(numericVars), 1), 
   p.mat = cor_pmat(numericVars),
-  colors = c("#25CB10", "white", "#FA7800"),
+  colors = c("#FA7800", "white", "#25CB10"),
   type="lower",
   insig = "blank") +  
-  labs(title = "Correlation across numeric variables") 
-
+  labs(title = "Correlation across numeric variables") +
+  geom_rect(aes(xmin = 0, xmax = 23.5, ymin = 1.25, ymax = 2.75),
+            fill = "transparent", color = "red", size = 1.5)
 
 
 cor.test(miamiHomes.train$ActualSqFt, miamiHomes.train$SalePrice, method = "pearson")
