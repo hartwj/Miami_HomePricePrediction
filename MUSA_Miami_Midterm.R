@@ -279,17 +279,19 @@ school.dummies<- data.frame(predict(dmy, newdata = sch_dmy.df))
 # Join dummies to miamiHomes.sf
 miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'ID')
 
+
+
 # Rename dummies
 miamiHomes.sf <- miamiHomes.sf %>%
-  rename(Brownsville.MS = NAMEBrownsville.Middle) %>%
-  rename(CitrusGrove.MS = NAMECitrus.Grove.Middle) %>%
-  rename(JosedeDiego.MS = NAMEde.Diego..Jose.Middle) %>%
-  rename(GeorgiaJA.MS = NAMEJones.Ayers..Georgia.Middle) %>%
-  rename(KinlochPk.MS = NAMEKinloch.Park.Middle) %>%
-  rename(Madison.MS = NAMEMadison.Middle) %>%
-  rename(Nautilus.MS = NAMENautilus.Middle) %>%
-  rename(Shenandoah.MS = NAMEShenandoah.Middle) %>%
-  rename(WestMiami.MS = NAMEWest.Miami.Middle) 
+  rename(Brownsville.MS = NAME.Brownsville.Middle) %>%
+  rename(CitrusGrove.MS = NAME.Citrus.Grove.Middle) %>%
+  rename(JosedeDiego.MS = NAME.de.Diego..Jose.Middle) %>%
+  rename(GeorgiaJA.MS = NAME.Jones.Ayers..Georgia.Middle) %>%
+  rename(KinlochPk.MS = NAME.Kinloch.Park.Middle) %>%
+  rename(Madison.MS = NAME.Madison.Middle) %>%
+  rename(Nautilus.MS = NAME.Nautilus.Middle) %>%
+  rename(Shenandoah.MS = NAME.Shenandoah.Middle) %>%
+  rename(WestMiami.MS = NAME.West.Miami.Middle) 
 
 
 ### Calculating shoreline distance
@@ -300,12 +302,12 @@ miamiHomes.sf <- miamiHomes.sf %>%
 
 miamiHomes.sf$Shore.mile <- miamiHomes.sf$Shore1/5280
 
-### Create home Age variable and clean miamiHomes.sf for exploratory analyses
+### Create home Age variable and clean miamiHomes.sf for exploratory analyses #Julian added medHHInc for a future problem
 miamiHomesClean.sf <- miamiHomes.sf %>%
   mutate(Age = saleYear - YearBuilt) %>%
   dplyr::select(ID, Folio, SalePrice, Property.City,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, 
-                Age, toPredict, Shore1, GEOID, MedRent, pctWhite, pctPoverty, 
+                Age, toPredict, Shore1, GEOID, MedHHInc, TotalPop, MedRent, pctWhite, pctPoverty, 
                 Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
                 KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS, geometry) 
 
@@ -348,14 +350,20 @@ ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = Actu
   geom_point() +
   geom_smooth(method = "lm")
 
-## Univarite Regression
+## Methods--------
+#-----Markdown The first regression we combined our feature engineering variables to see which were statistically significant
+#-----Markdown the second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
+
+
 Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
              st_drop_geometry() %>%
-  dplyr::select(Shore1, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty))
+  dplyr::select(Shore1, MedHHInc, TotalPop, MedRent, pctWhite, pctPoverty, 
+                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
+                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS,))
 
 Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
              st_drop_geometry()    %>%
-             dplyr::select(-GEOID))
+             dplyr::select(-GEOID, -ID, -toPredict))
 
 summary(Reg1)
 summary(Reg2)
@@ -368,10 +376,10 @@ stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html"
 #GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
 
 # -----Part 4 - Train/Test Split -----------
-
+#-------MarkdownSame features as are 2nd model, but similar R2 showing that its generalizable with a simple test train split
 
 # set random seed
-set.seed(31712)
+set.seed(31711)
 
 # get index for training sample
 inTrain <- caret::createDataPartition(
@@ -384,7 +392,7 @@ miami.test     <- miamiHomes.train[-inTrain,]
 
 reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
                    st_drop_geometry() %>%
-             dplyr::select(-GEOID))
+             dplyr::select(-GEOID, -ID, -toPredict))
 
 summary(reg2_split)
 
@@ -545,7 +553,7 @@ set.seed(73506)
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
           st_drop_geometry() %>%
-          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+          dplyr::select(-ActualSqFt, -TotalPop, -ID, 
                         -MedHHInc, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
@@ -638,7 +646,7 @@ miami.test     <- miamiHomes.train[-inTrain,]
 #however I had to drop GEOID since there was a levels error
 finaltraining <- lm(SalePrice ~ ., data = miami.training %>%
                       st_drop_geometry() %>%
-                   dplyr::select(-GEOID, -YearBuilt, -EffectiveYearBuilt, 
+                   dplyr::select(-GEOID, -ID, 
                                  -TotalPop, -MedHHInc, -toPredict))
 
 miami.test <-
@@ -659,14 +667,14 @@ neighborList <- knn2nb(knearneigh(coords, k_nearest_neighbors))
 spatialWeights <- nb2listw(neighborList, style="W")
 miamiHomesClean.sf$lagPrice <- lag.listw(spatialWeights, miamiHomesClean.sf$SalePrice)
 
-
+miami.test.lag <- drop_na(miami.test)
 #errors
-coords.test <- st_coordinates(st_centroid(miami.test))
+coords.test <- st_coordinates(st_centroid(miami.test.lag))
 neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
-miami.test$lagPriceError <- lag.listw(spatialWeights.test, miami.test$SalePrice.AbsError)
+miami.test$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 
-ggplot(boston.sf, aes(x=lagPrice, y=SalePrice)) +
+ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
   geom_point(colour = "#FA7800") +
   geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
   labs(title = "Price as a function of the spatial lag of price",
@@ -675,7 +683,7 @@ ggplot(boston.sf, aes(x=lagPrice, y=SalePrice)) +
        y = "Sale Price") +
   plotTheme()
 
-ggplot(boston.test, aes(x=lagPriceError, y=SalePrice)) +
+ggplot(miami.test.lag, aes(x=lagPriceError, y=SalePrice)) +
   geom_point(colour = "#FA7800") +
   geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
   labs(title = "Error as a function of the spatial lag of price",
@@ -703,15 +711,19 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 #Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
+PredictMap <-
+  miamiHomesClean.sf %>%
+  mutate(SalePrice.Predict = predict(finaltraining, miamiHomesClean.sf))
 
+ggplot() +
+  geom_sf(data = PredictMap, aes(fill = q5(SalePrice.Predict))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(PredictMap,"SalePrice.Predict"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Precited Prices of All Homes")
 
-
-
-
-
-
-
-
+#This really needs a basemap or something but it works
 
 
 # MAPE by Neighborhood
