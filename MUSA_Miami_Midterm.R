@@ -285,15 +285,15 @@ miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'Folio')
 
 # Rename dummies
 miamiHomes.sf <- miamiHomes.sf %>%
-  rename(Brownsville.MS = NAMEBrownsville.Middle) %>%
-  rename(CitrusGrove.MS = NAMECitrus.Grove.Middle) %>%
-  rename(JosedeDiego.MS = NAMEde.Diego..Jose.Middle) %>%
-  rename(GeorgiaJA.MS = NAMEJones.Ayers..Georgia.Middle) %>%
-  rename(KinlochPk.MS = NAMEKinloch.Park.Middle) %>%
-  rename(Madison.MS = NAMEMadison.Middle) %>%
-  rename(Nautilus.MS = NAMENautilus.Middle) %>%
-  rename(Shenandoah.MS = NAMEShenandoah.Middle) %>%
-  rename(WestMiami.MS = NAMEWest.Miami.Middle) 
+  rename(Brownsville.MS = NAME.Brownsville.Middle) %>%
+  rename(CitrusGrove.MS = NAME.Citrus.Grove.Middle) %>%
+  rename(JosedeDiego.MS = NAME.de.Diego..Jose.Middle) %>%
+  rename(GeorgiaJA.MS = NAME.Jones.Ayers..Georgia.Middle) %>%
+  rename(KinlochPk.MS = NAME.Kinloch.Park.Middle) %>%
+  rename(Madison.MS = NAME.Madison.Middle) %>%
+  rename(Nautilus.MS = NAME.Nautilus.Middle) %>%
+  rename(Shenandoah.MS = NAME.Shenandoah.Middle) %>%
+  rename(WestMiami.MS = NAME.West.Miami.Middle) 
 
 
 ### Calculating shoreline distance
@@ -337,18 +337,20 @@ ggcorrplot(
 
 
 
-cor.test(miamiHomes.train$AdjustedSqFt, miamiHomes.train$SalePrice, method = "pearson")
+cor.test(miamiHomes.train$ActualSqFt, miamiHomes.train$SalePrice, method = "pearson")
 
 hist(miamiHomes.train$SalePrice)
-ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = AdjustedSqFt)) +
+ggplot(filter(miamiHomes.train, SalePrice <= 2000000), aes(y=SalePrice, x = ActualSqFt)) +
   geom_point() +
   geom_smooth(method = "lm")
 
 ## Univarite Regression
 Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-  dplyr::select(Shore1, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, schoolID))
+             st_drop_geometry() %>%
+  dplyr::select(Shore1, TotalPop, MedHHInc, MedRent, pctWhite, pctPoverty))
 
 Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+             st_drop_geometry()    %>%
              dplyr::select(-GEOID))
 
 summary(Reg1)
@@ -365,7 +367,7 @@ stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html"
 
 
 # set random seed
-set.seed(3171)
+set.seed(31712)
 
 # get index for training sample
 inTrain <- caret::createDataPartition(
@@ -377,6 +379,7 @@ miami.test     <- miamiHomes.train[-inTrain,]
 
 
 reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
+                   st_drop_geometry() %>%
              dplyr::select(-GEOID))
 
 summary(reg2_split)
@@ -532,13 +535,14 @@ fitControl <- trainControl(method = "cv",
                            # savePredictions differs from book
                            savePredictions = TRUE)
 
-set.seed(7350)
+set.seed(73506)
 #No neighborhoods R2=0.788, MAE=525,277
 
 reg.cv2 <- 
   train(SalePrice ~ ., data = miamiHomes.train %>%
-          dplyr::select(-AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
-                        -MedHHInc, -road_dist, -park_dist, -toPredict), 
+          st_drop_geometry() %>%
+          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+                        -MedHHInc, -toPredict), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.omit)
@@ -630,8 +634,8 @@ miami.test     <- miamiHomes.train[-inTrain,]
 #however I had to drop GEOID since there was a levels error
 finaltraining <- lm(SalePrice ~ ., data = miami.training %>%
                       st_drop_geometry() %>%
-                   dplyr::select(-GEOID, -AdjustedSqFt, -LivingSqFt, -YearBuilt, -EffectiveYearBuilt, 
-                                 -TotalPop, -MedHHInc, -road_dist, -park_dist, -toPredict))
+                   dplyr::select(-GEOID, -YearBuilt, -EffectiveYearBuilt, 
+                                 -TotalPop, -MedHHInc, -toPredict))
 
 miami.test <-
   miami.test %>%
@@ -677,6 +681,23 @@ ggplot(boston.test, aes(x=lagPriceError, y=SalePrice)) +
   plotTheme()
 
 
+#Moran's I Test
+moranTest <- moran.mc(miami.test$SalePrice.AbsError, 
+                      spatialWeights.test, nsim = 999, na.action=na.exclude)
+
+ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
+  geom_histogram(binwidth = 0.01) +
+  geom_vline(aes(xintercept = moranTest$statistic), colour = "#FA7800",size=1) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  labs(title="Observed and permuted Moran's I",
+       subtitle= "Observed Moran's I in orange",
+       x="Moran's I",
+       y="Count",
+       caption="Public Policy Analytics, Figure 6.8") +
+  plotTheme()
+
+
+#Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
 
 
@@ -689,6 +710,76 @@ ggplot(boston.test, aes(x=lagPriceError, y=SalePrice)) +
 
 
 
+# MAPE by Neighborhood
+
+nhood_sum <- miami.test %>% 
+  group_by(GEOID) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
+
+nhood_sum %>% 
+  st_drop_geometry %>%
+  arrange(desc(meanMAE)) %>% 
+  kable() %>% kable_styling()
+
+map_preds_sum <- map_preds %>% 
+  group_by(GEOID) %>% 
+  summarise(meanMAE = mean(SalePrice.AbsError))
+
+ggplot() +
+  geom_sf(data = miamiHomesClean.sf %>% 
+            left_join(st_drop_geometry(map_preds_sum), by = "GEOID"),
+          aes(fill = q5(meanMAE))) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(nhood_sum,"meanMAE"),
+                    name="Quintile\nBreaks") +
+  mapTheme() +
+  labs(title="Absolute sale price errors on the OOF set by Neighborhood")
+
+#Scatter of MAPE & Mean Price by Neighborhood
+
+plot(nhood_sum$meanPrice, nhood_sum$meanMAE, 
+     main = "Scatter of Mean Price and Mean MAE by Census Tract", 
+     xlab = "Mean Price",
+     ylab = "Mean MAE")
+
+#Testing Generalizability of Median Household Income Split
+
+median(as.numeric(miami.test$MedHHInc), na.rm=TRUE)
+
+miamiPoor <- miami.test %>% 
+  filter(MedHHInc<= 37117)
+miamiRich <- miami.test %>% 
+  filter(MedHHInc> 37117)
+
+miamiPoorLM <- 
+  train(SalePrice ~ ., data = miamiPoor %>%
+          st_drop_geometry() %>%
+          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+                        -MedHHInc, -toPredict,
+                        -Regression, -SalePrice.Predict, -SalePrice.Error, -SalePrice.AbsError, -SalePrice.APE), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.omit)
+
+miamiPoorLM
+
+miamiRichLM <- 
+  train(SalePrice ~ ., data = miamiRich %>%
+          st_drop_geometry() %>%
+          dplyr::select(-ActualSqFt, -YearBuilt, -EffectiveYearBuilt, -TotalPop, 
+                        -MedHHInc, -toPredict,
+                        -Regression, -SalePrice.Predict, -SalePrice.Error, -SalePrice.AbsError, -SalePrice.APE), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.omit)
+
+miamiRichLM
+
+#Providing Results of Cross Validation Test
+reg.cv2$results %>%
+  knitr::kable()
 
 
 
