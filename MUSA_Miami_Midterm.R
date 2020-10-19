@@ -16,6 +16,7 @@ library(raster)
 library(stringr)
 library(stargazer)
 library(ggpubr)
+library(caret) # for creating dummies using one hot encoding
 
 library(rgeos)
 library(spdep)
@@ -223,7 +224,7 @@ shoreline.point <- st_cast(shoreline,"POINT")
 
 
 ### 2018 - 5-Year ACS Data by Census Tract
-tracts <- 
+tracts18 <- 
   get_acs(geography = "tract", variables = c("B25026_001E","B02001_002E",
                                              "B19013_001E","B25058_001E",
                                              "B06012_002E"), 
@@ -239,24 +240,6 @@ tracts <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
-### Highways & Major Road Data
-roads <- 
-  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
-  filter(CLASS == c('1','2')) %>%
-  st_transform('ESRI:102658') 
-
-miamiRds <- roads[miami.base,]
-
-
-### Local Park Data
-parks <- 
-  st_read("https://opendata.arcgis.com/datasets/8c9528d3e1824db3b14ed53188a46291_0.geojson") %>%
-  filter(CITY == "Miami Beach" | CITY == "Miami") %>%
-  filter(TYPE == "Local") %>%
-  st_transform('ESRI:102658') 
-
-parks <- parks[miami.base,]
-
 
 ### Middle School
 midschool <- 
@@ -266,9 +249,6 @@ midschool <-
   st_transform('ESRI:102658') 
 
 midschool <- midschool[miami.base,]
-
-miamiHomes.rings <- st_join(miamiHomes.rings, midschool, join = st_within)
-
 
 # --- Part 2: Feature Engineering ----
 
@@ -287,55 +267,52 @@ miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Patio = as.integer(str_detect(XF_all,"patio")))
 
 
-### Adding shoreline distance
+### Attach tract data to home prices
+miamiHomes.sf <- st_join(miamiHomes.sf, tracts18, join = st_within)
+
+### Create dummy variables for middle school using one hot encoding
+miamiSchools.sf <- st_join(miamiHomes.sf, midschool, join = st_within)
+
+sch_dmy.df <- miamiSchools.sf %>%
+  st_drop_geometry() %>%
+  dplyr::select(Folio, NAME) 
+
+dmy <- dummyVars(" ~ .", data = sch_dmy.df)
+school.dummies<- data.frame(predict(dmy, newdata = sch_dmy.df))
+
+# Join dummies to miamiHomes.sf
+miamiHomes.sf <- inner_join(miamiHomes.sf, school.dummies, by = 'Folio')
+
+# Rename dummies
+miamiHomes.sf <- miamiHomes.sf %>%
+  rename(Brownsville.MS = NAMEBrownsville.Middle) %>%
+  rename(CitrusGrove.MS = NAMECitrus.Grove.Middle) %>%
+  rename(JosedeDiego.MS = NAMEde.Diego..Jose.Middle) %>%
+  rename(GeorgiaJA.MS = NAMEJones.Ayers..Georgia.Middle) %>%
+  rename(KinlochPk.MS = NAMEKinloch.Park.Middle) %>%
+  rename(Madison.MS = NAMEMadison.Middle) %>%
+  rename(Nautilus.MS = NAMENautilus.Middle) %>%
+  rename(Shenandoah.MS = NAMEShenandoah.Middle) %>%
+  rename(WestMiami.MS = NAMEWest.Miami.Middle) 
+
+
+### Calculating shoreline distance
 # Creating distance to shore feature
 miamiHomes.sf <- miamiHomes.sf %>%
   mutate(Shore1 = nn_function(st_coordinates(st_centroid(miamiHomes.sf)),
                               st_coordinates(st_centroid(shoreline.point)),1))
 
-miamiHomes.sf <- st_join(miamiHomes.sf, tracts, join = st_within)
 miamiHomes.sf$Shore.mile <- miamiHomes.sf$Shore1/5280
 
-### Major Roads: 1/8 mile ring buffers
-# Create unioned buffer for major roads in Miami & Miami Beach
-miamiRds.buffer <- st_union(st_buffer(miamiRds, 660)) %>%
-  st_sf() %>%
-  mutate(Legend = "Unioned Buffer")
-miamiRds.buffer <- filter(miamiRds.buffer, Legend=="Unioned Buffer")
-
-# Create 1/8 mile ring buffers
-miami.rings <- multipleRingBuffer(miamiRds.buffer, 660*15, 660) %>%
-  rename(road_dist = distance)
-
-# Join home prices with ring buffer -- transform NAs to 0
-miamiHomes.rings <- st_join(miamiHomes.sf, miami.rings, join = st_within) %>%
-  st_sf() 
-miamiHomes.rings[c("road_dist")][is.na(miamiHomes.rings[c("road_dist")])] <- 0
-
-
-### Parks - 1/8 ring buffers
-parks.buffer <- st_union(st_buffer(parks, 660)) %>%
-  st_sf() %>%
-  mutate(Legend = "Unioned Buffer")
-
-park.rings <- multipleRingBuffer(parks.buffer, 660*8, 660) %>%
-  rename(park_dist = distance)
-
-# Join home prices with park ring buffers
-miamiHomes.rings <- st_join(miamiHomes.rings, park.rings, join = st_within) %>%
-  st_sf() 
-
-miamiHomes.rings[c("park_dist")][is.na(miamiHomes.rings[c("park_dist")])] <- 0
-
-
-### Cleaning miamiHomes.sf for exploratory analyses
-miamiHomesClean.sf <- miamiHomes.rings %>%
+### Create home Age variable and clean miamiHomes.sf for exploratory analyses
+miamiHomesClean.sf <- miamiHomes.sf %>%
   mutate(Age = saleYear - YearBuilt) %>%
   dplyr::select(Folio, SalePrice, Property.City,
                 LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, 
                 YearBuilt, EffectiveYearBuilt, Age, toPredict, Shore1, GEOID, TotalPop, 
-                MedHHInc, MedRent, pctWhite, pctPoverty, road_dist, park_dist, 
-                midschoolID, geometry) 
+                MedHHInc, MedRent, pctWhite, pctPoverty, Brownsville.MS, CitrusGrove.MS, 
+                JosedeDiego.MS, GeorgiaJA.MS, KinlochPk.MS, Madison.MS, Nautilus.MS, 
+                Shenandoah.MS, WestMiami.MS, geometry) 
 
 # --- Markdown: Introduction ----
 
