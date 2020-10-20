@@ -220,7 +220,6 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 
 ```
 
-
 ```{r message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
 
 # --- Part 1: Data Wrangling ----
@@ -378,6 +377,7 @@ The first regression we combined our feature engineering variables to see which 
 
 ## Data
 
+
 ```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
 
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -460,7 +460,7 @@ ggcorrplot(
 ```
 
 
-```{r summary statistics, message=FALSE, warning=FALSE, include=FALSE}
+```{r summary stat table, message=FALSE, warning=FALSE, include=FALSE}
 
 #Summary Statistics Table
 sumstat.df <- miamiHomes.train %>%
@@ -477,7 +477,7 @@ stargazer(sumstat.df, title="Summary Statistics", results ='asis', message=FALSE
 
 ```
 
-```{r Summary Statistics, message=FALSE, warning=FALSE}
+```{r scatterplots, message=FALSE, warning=FALSE}
 # Home price correlation scatterplots 
 a <- ggplot(trainprice.sf, aes(y=SalePrice, x = ActualSqFt)) +
   geom_point() +
@@ -534,8 +534,7 @@ stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html"
 
 ```
 
-
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r models, message=FALSE, warning=FALSE, include=FALSE}
 # Same features as our 2nd model
 # set random seed
 set.seed(31711)
@@ -558,7 +557,7 @@ summary(reg2_split)
 
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+```{r mae/mape, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 # Calculating MAE and MAPE for a single test test
 mape <- function(actual,pred){
   mape <- mean(abs((actual - pred)/actual))*100
@@ -643,7 +642,7 @@ write.csv(output_preds, "Florid-API Keys.csv")
 
 ```
 
-```{r , message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
+```{r mae histogram, message=FALSE, warning=FALSE, echo=FALSE}
 ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
   labs(title="Histogram of Cross Validation MAE",
        caption="Based on 100 Folds")+
@@ -657,7 +656,7 @@ regCV2plot <- as.data.frame(reg.cv2$pred)
 
 ```
 
-```{r prediction vs. observed, message=FALSE, warning=FALSE}
+```{r pred v obs plot, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
   geom_point() +
   stat_smooth(aes(obs, obs), 
@@ -673,7 +672,7 @@ ggplot(regCV2plot,aes(obs,pred)) +
 
 ```
 
-``` {r test v. train, echo=FALSE, message=FALSE, warning=FALSE}
+``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
   st_sf()
 
@@ -701,7 +700,7 @@ ggarrange(tst, trn, ncol = 2, nrow = 1,
           common.legend = TRUE, legend = "right")
 ```
 
-```{r spatial corr of errors, echo=FALSE, message=FALSE, warning=FALSE}
+```{r spatial corr of errors, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 # Is there a spatial correlation of errors?
 
 # get index for training sample
@@ -743,8 +742,10 @@ coords.test <- st_coordinates(st_centroid(miami.test.lag))
 neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
 miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
+```
 
-#this is breaking because of annotation_map & geom_sf miami base
+```{r, spatial lag err plots, echo=FALSE, message=FALSE, warning=FALSE}
+# Spatial Lag Error Plots
 ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
   geom_point(colour = "#FA7800") +
   geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
@@ -763,7 +764,9 @@ ggplot(miami.test.lag, aes(x=lagPriceError, y=SalePrice)) +
        y = "Sale Price") +
   plotTheme()
 
+```
 
+```{r morans, echo=FALSE, message=FALSE, warning=FALSE}
 #Moran's I Test
 moranTest <- moran.mc(miami.test.lag$SalePrice.AbsError, 
                       spatialWeights.test, nsim = 999, na.action=na.exclude)
@@ -781,7 +784,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 ```
 
-
+### Commented out some plots b/c don't think they're needed (See Below)
 ```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
@@ -882,6 +885,7 @@ miamiRichLM <-
 
 miamiRichLM
 miamiRichLM
+```
 
 ```{r}
 kable(miamiPoorLM$results)
