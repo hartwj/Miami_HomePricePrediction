@@ -376,7 +376,166 @@ This project attempts to predict housing prices in metropolitan Miami by taking 
 
 One interesting finding from this process is which middle school a house exists
 
-## Data 
+The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
+
+```{r regression, message=FALSE, warning=FALSE, include=FALSE}
+
+
+Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+             st_drop_geometry() %>%
+  dplyr::select(Shore1, MedHHInc, TotalPop, MedRent, pctWhite, pctPoverty, 
+                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
+                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS,))
+
+Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
+             st_drop_geometry()    %>%
+             dplyr::select(-GEOID, -ID, -toPredict))
+
+summary(Reg1)
+summary(Reg2)
+summ(Reg1)
+
+stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
+
+
+#GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Same features as our 2nd model
+# set random seed
+set.seed(31711)
+
+# get index for training sample
+inTrain <- caret::createDataPartition(
+  y = miamiHomes.train$SalePrice, 
+  p = .60, list = FALSE)
+
+# split data into training and test
+miami.training <- miamiHomes.train[inTrain,] 
+miami.test     <- miamiHomes.train[-inTrain,]  
+
+
+reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
+                   st_drop_geometry() %>%
+             dplyr::select(-GEOID, -ID, -toPredict))
+
+summary(reg2_split)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Calculating MAE and MAPE for a single test test
+mape <- function(actual,pred){
+  mape <- mean(abs((actual - pred)/actual))*100
+  return (mape)
+}
+
+reg2MAE <- caret::MAE(predict(reg2_split), miami.test$SalePrice)
+reg2MAPE <- mape(miami.test$SalePrice,predict(reg2_split))
+
+
+cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)) %>%
+  knitr::kable()
+  
+
+#The neighborhood variables clearly make our model better, but could still be overfitting
+```
+
+```{r K-Fold Cross Validation, message=FALSE, warning=FALSE, echo=FALSE}
+
+fitControl <- trainControl(method = "cv", 
+                           number = 100,
+                           # savePredictions differs from book
+                           savePredictions = TRUE)
+
+set.seed(73506)
+#No neighborhoods R2=0.788, MAE=525,277
+
+reg.cv2 <- 
+  train(SalePrice ~ ., data = miamiHomes.train %>%
+          st_drop_geometry() %>%
+          dplyr::select(-ActualSqFt, -TotalPop, -ID, 
+                        -MedHHInc, -toPredict), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.omit)
+
+reg.cv2
+
+#Providing Results of Cross Validation Test
+reg.cv2$results %>%
+  knitr::kable()
+
+#Creating an MAE Histogram
+MAE_hist <- as.data.frame(reg.cv2$pred) %>%
+  mutate(ABS_error = abs(pred-obs)) %>%
+  group_by(Resample) %>%
+  summarize(MAE = mean(ABS_error, na.rm = T))
+
+ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
+  labs(title="Histogram of Cross Validation MAE",
+       caption="Based on 100 Folds")+
+  theme_classic()
+  
+
+#Plotting Predicted Prices as a Function of Observed Prices
+
+regCV2plot <- as.data.frame(reg.cv2$pred)
+
+
+ggplot(regCV2plot,aes(obs,pred)) +
+  geom_point() +
+  stat_smooth(aes(obs, obs), 
+              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
+  stat_smooth(aes(obs, pred), 
+              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
+  labs(title="Predicted sale price as a function of observed price",
+       subtitle="Orange line represents a perfect prediction; Green line represents prediction",
+       x="Sale Price",
+       y="Predicted Price",
+       caption='Figure x.x') +
+  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
+
+
+
+
+```
+
+```{r Outputting our CV predictions to CV, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
+# Shore1, GEOID, MedRent, pctWhite, pctPoverty
+# GEOID = .8337, property zip = .99, mailing zip 0.845
+
+# How do we interpret the spread of values between the folds?
+# extract predictions from CV object
+cv_preds <- reg.cv2$pred
+# compare number of observations between data sets
+nrow(miamiHomes.train)
+nrow(cv_preds)
+
+## Create dataset with "out of fold" predictions and original data
+map_preds <- miamiHomes.test %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(SalePrice.AbsError = abs(pred - SalePrice))
+
+
+#output to CSV
+
+output_preds <- map_preds %>%
+  dplyr::select(pred, Folio) %>%
+  mutate(team_name = "Florid-API Keys") %>%
+  rename(prediction = pred)
+
+write.csv(output_preds, "Florid-API Keys.csv")
+
+```
+
+## Data
 ```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
 
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -549,166 +708,6 @@ d <- ggplot(trainprice.sf, aes(y=SalePrice, x = Age)) +
   xlab(label='Age')
 
 ggarrange(a,b,c,d, ncol = 2, nrow = 2)
-
-```
-
-
-The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
-
-```{r regression, message=FALSE, warning=FALSE, include=FALSE}
-
-
-Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-             st_drop_geometry() %>%
-  dplyr::select(Shore1, MedHHInc, TotalPop, MedRent, pctWhite, pctPoverty, 
-                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
-                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS,))
-
-Reg2 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
-             st_drop_geometry()    %>%
-             dplyr::select(-GEOID, -ID, -toPredict))
-
-summary(Reg1)
-summary(Reg2)
-summ(Reg1)
-
-stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
-
-
-#GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
-
-```
-
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-# Same features as our 2nd model
-# set random seed
-set.seed(31711)
-
-# get index for training sample
-inTrain <- caret::createDataPartition(
-  y = miamiHomes.train$SalePrice, 
-  p = .60, list = FALSE)
-
-# split data into training and test
-miami.training <- miamiHomes.train[inTrain,] 
-miami.test     <- miamiHomes.train[-inTrain,]  
-
-
-reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
-                   st_drop_geometry() %>%
-             dplyr::select(-GEOID, -ID, -toPredict))
-
-summary(reg2_split)
-
-```
-
-```{r echo=FALSE, message=FALSE, warning=FALSE}
-# Calculating MAE and MAPE for a single test test
-mape <- function(actual,pred){
-  mape <- mean(abs((actual - pred)/actual))*100
-  return (mape)
-}
-
-reg2MAE <- caret::MAE(predict(reg2_split), miami.test$SalePrice)
-reg2MAPE <- mape(miami.test$SalePrice,predict(reg2_split))
-
-
-cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)) %>%
-  knitr::kable()
-  
-
-#The neighborhood variables clearly make our model better, but could still be overfitting
-```
-
-```{r K-Fold Cross Validation, message=FALSE, warning=FALSE, echo=FALSE}
-
-fitControl <- trainControl(method = "cv", 
-                           number = 100,
-                           # savePredictions differs from book
-                           savePredictions = TRUE)
-
-set.seed(73506)
-#No neighborhoods R2=0.788, MAE=525,277
-
-reg.cv2 <- 
-  train(SalePrice ~ ., data = miamiHomes.train %>%
-          st_drop_geometry() %>%
-          dplyr::select(-ActualSqFt, -TotalPop, -ID, 
-                        -MedHHInc, -toPredict), 
-        method = "lm", 
-        trControl = fitControl, 
-        na.action = na.omit)
-
-reg.cv2
-
-#Providing Results of Cross Validation Test
-reg.cv2$results %>%
-  knitr::kable()
-
-#Creating an MAE Histogram
-MAE_hist <- as.data.frame(reg.cv2$pred) %>%
-  mutate(ABS_error = abs(pred-obs)) %>%
-  group_by(Resample) %>%
-  summarize(MAE = mean(ABS_error, na.rm = T))
-
-ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
-  labs(title="Histogram of Cross Validation MAE",
-       caption="Based on 100 Folds")+
-  theme_classic()
-  
-
-#Plotting Predicted Prices as a Function of Observed Prices
-
-regCV2plot <- as.data.frame(reg.cv2$pred)
-
-
-ggplot(regCV2plot,aes(obs,pred)) +
-  geom_point() +
-  stat_smooth(aes(obs, obs), 
-              method = "lm", se = FALSE, size = 1, colour="#FA7800") + 
-  stat_smooth(aes(obs, pred), 
-              method = "lm", se = FALSE, size = 1, colour="#25CB10") +
-  labs(title="Predicted sale price as a function of observed price",
-       subtitle="Orange line represents a perfect prediction; Green line represents prediction",
-       x="Sale Price",
-       y="Predicted Price",
-       caption='Figure x.x') +
-  plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
-
-
-
-
-```
-
-```{r Outputting our CV predictions to CV, echo=FALSE, message=FALSE, warning=FALSE}
-
-# Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
-# Shore1, GEOID, MedRent, pctWhite, pctPoverty
-# GEOID = .8337, property zip = .99, mailing zip 0.845
-
-# How do we interpret the spread of values between the folds?
-# extract predictions from CV object
-cv_preds <- reg.cv2$pred
-# compare number of observations between data sets
-nrow(miamiHomes.train)
-nrow(cv_preds)
-
-## Create dataset with "out of fold" predictions and original data
-map_preds <- miamiHomes.test %>% 
-  rowid_to_column(var = "rowIndex") %>% 
-  left_join(cv_preds, by = "rowIndex") %>% 
-  mutate(SalePrice.AbsError = abs(pred - SalePrice))
-
-
-#output to CSV
-
-output_preds <- map_preds %>%
-  dplyr::select(pred, Folio) %>%
-  mutate(team_name = "Florid-API Keys") %>%
-  rename(prediction = pred)
-
-write.csv(output_preds, "Florid-API Keys.csv")
 
 ```
 
