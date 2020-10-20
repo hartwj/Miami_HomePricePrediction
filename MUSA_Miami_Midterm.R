@@ -605,6 +605,8 @@ sumstat.df <- miamiHomes.train %>%
                 Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
                 KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
 
+summary(sumstat.df)
+
 stargazer(sumstat.df, title="Summary Statistics", type='html', 
           summary.stat = c('n','mean','sd','min','max'), out='Summary_Statistics.htm')
 

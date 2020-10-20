@@ -367,7 +367,7 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 ```
 
-## Introduction & Summary
+# Introduction & Summary
 
 An accurate home price prediction algorithm can reduce volatility in the housing market and take into account existing factors that may not be reflected in a home’s previous selling prices (e.g., new roof, new shopping center, etc.) However, predictive algorithms can also be exceedingly difficult to perfect. A falsely high average estimate in a neighborhood might lead home sellers to list their homes at too high an asking price and dragging out the process of selling their home, thereby introducing friction into the housing market. A falsely low estimate may depress the value of what is oftentimes a homeowner’s most valuable asset.  
 
@@ -397,8 +397,11 @@ After testing and rejecting several features that did not deduce our prediction 
 
 
 
-## Data
+# Data
 
+## Dependent Variable Map: Home Prices
+
+The map below shows the spatial distribution of home prices in Miami and Miami Beach. Darker points represent more expensive homes, with the deepest purple shade representing any home 1 million dollars or higher. Given the extreme range of home prices in Miami (max approx. 27 million dollars), we felt it necessary to collapse the outlier homes into the highest tier of home prices.
 
 ```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -423,6 +426,10 @@ trn
 
 ```
 
+## Independent Variable Map #2: Distance from Shore
+
+Here we see the spatial relationship between home sale prices and distance from the shore. Unsurprisingly, as we move farther inland, home prices decrease.
+
 ``` {r shore, message=FALSE, warning=FALSE}
 # Map of Distance to Shore
 ggplot() + 
@@ -435,6 +442,10 @@ ggplot() +
   scale_colour_viridis(name = "Distance (miles)")
 
 ```
+
+## Independent Variable Map #3: Middle Schools
+
+This map shows the relationship between middle school attendance zones and home sale prices.
 
 ``` {r middle school, message=FALSE, warning=FALSE}
 
@@ -455,6 +466,10 @@ ggplot() +
                       na.value = .97) 
 ```
 
+## Independent Variable Map #4: Percent White Residents
+
+Below is a map of the percent of White residents in each Census tract in Miami and Miami Beach. As shown below, although having a higher percentage of White residence does not appear to be closely correlated with home price, the absence of White residents is clearly tied to a lower estimate of home price.
+
 ```{r white, echo=FALSE, message=FALSE, warning=FALSE}
 colors <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d')
 tracts18$pctWhite100 <- (tracts18$pctWhite)*100
@@ -463,7 +478,8 @@ ggplot()+
   annotation_map_tile("cartolight") +
   geom_sf(data=tracts18, aes(fill = q5(pctWhite100)), lwd = 0) +
   geom_sf(data=trainprice.sf, aes(color=SalePrice), size=1) + 
-  labs(title = "% White Residents (2018)") +
+  labs(title = "% White Residents (2018)",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   mapTheme() + 
   scale_fill_manual(values = colors,
                     name= "% White Residents\n(Quintile Breaks)", 
@@ -478,6 +494,81 @@ ggplot()+
                       end = .95,
                       na.value = .95)
 ```
+
+## Excluded Variable of Interest: Major Roads
+
+Several other features such as distance from major roads, parks, and location within elementary and high school attendance zones were tested, but did not prove to be relevant. As shown below, there appears to be little relationship between distance from major roads and home price.
+
+```{r roads, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+### Calculating distance to major roads: 1/8 mile ring buffers
+### Distance from Major Roads buffer
+
+### Read in base map
+miami.base <- 
+  st_read("https://opendata.arcgis.com/datasets/5ece0745e24b4617a49f2e098df8117f_0.geojson") %>%
+  st_transform('ESRI:102658') %>%
+  filter(NAME == "MIAMI BEACH" | NAME == "MIAMI") %>%
+  st_union()
+
+# Creating buffers for distance to major roads
+roads <- 
+  st_read("https://opendata.arcgis.com/datasets/8bc234275dc749329c4e242abcfc5a0f_0.geojson") %>%
+  filter(CLASS == c('1','2')) %>%
+  st_transform('ESRI:102658') 
+
+miamiRds <- roads[miami.base,]
+
+# Create unioned buffer for major roads
+miamiRds.buffer <- st_union(st_buffer(miamiRds, 1320)) %>%
+  st_sf() %>%
+  mutate(Legend = "Unioned Buffer")
+
+miamiRds.buffer <- filter(miamiRds.buffer, Legend=="Unioned Buffer")
+
+# Create 1/4 mile ring buffers
+miami.rings <- multipleRingBuffer(miamiRds.buffer, 1320*8, 1320) %>%
+  rename(road_dist = distance)
+```
+
+```{r major roads, echo=FALSE, message=FALSE, warning=FALSE}
+# Plot to check ring buffers
+ggplot() + 
+  annotation_map_tile(type = 'cartolight', progress = 'none') +
+  geom_sf(data = miami.rings, fill = "white", alpha = 0.3) +
+  geom_sf(data=miamiRds, color = "black", size= 2) +
+  geom_sf(data=trainprice.sf, aes(colour=SalePrice),
+          show.legend = "line", size= 1) +
+  labs(title = "Home Price & Distances from Major Roads", 
+       subtitle = "1/8 Mile Ring Buffers from Roads",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(option='C',
+                      name = "Home Price\n($0-$1M+)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97)
+```
+
+## Summary Statistics of Variables/Features
+```{r summary stat, message=FALSE, warning=FALSE, include=FALSE}
+
+#Summary Statistics Table
+sumstat.df <- miamiHomes.train %>%
+  st_drop_geometry() %>%
+  dplyr::select(SalePrice, Property.City,GEOID, 
+                LotSize, Age, Stories, Bed, Bath, Pool, Fence, Patio, 
+                Shore1, MedRent, pctWhite, pctPoverty, 
+                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
+                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
+```
+
+```{r summ table, message=FALSE, warning=FALSE, results = "asis"}
+stargazer(sumstat.df, title="Summary Statistics", type='html', 
+          summary.stat = c('n','mean','sd','min','max'))
+```
+
+## Correlation 
+Below is a correlation matrix, showing the relatedness of each numeric variable to every other. The red-bounded box shows each variable's correlation with sale price, our dependent variable. 
 
 ```{r correlation matrix, message=FALSE, warning=FALSE}
 ###Correlation Matrix
@@ -504,23 +595,9 @@ ggcorrplot(
 
 ```
 
+## Scatterplots
 
-```{r summary stat, message=FALSE, warning=FALSE, include=FALSE}
-
-#Summary Statistics Table
-sumstat.df <- miamiHomes.train %>%
-  st_drop_geometry() %>%
-  dplyr::select(SalePrice, Property.City,GEOID, 
-                LotSize, Age, Stories, Bed, Bath, Pool, Fence, Patio, 
-                Shore1, MedRent, pctWhite, pctPoverty, 
-                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
-                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
-```
-
-```{r summ table, message=FALSE, warning=FALSE, results = "asis"}
-stargazer(sumstat.df, title="Summary Statistics", type='html', 
-          summary.stat = c('n','mean','sd','min','max'))
-```
+The below plots show the linear relationship between 4 independent variables, and home prices. Actual square footage is most highly and positively correlated with home price. Median rent in a home's area also has a small positive relationship, and distance from the shore and age are quite expectedly negatively correlated (i.e., as the age of a home increases, home price decreases).
 
 ```{r scatterplots, message=FALSE, warning=FALSE}
 # Home price correlation scatterplots 
@@ -552,8 +629,7 @@ ggarrange(a,b,c,d, ncol = 2, nrow = 2)
 
 ```
 
-
-## Method
+# Method
 
 ```{r regression, message=FALSE, warning=FALSE, include=FALSE}
 
@@ -624,9 +700,8 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
 ```
 
 
-#our best model was reg.cv2
 
-## Results
+# Results
 
 The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2.
 
