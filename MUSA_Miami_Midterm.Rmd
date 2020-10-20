@@ -367,22 +367,38 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 ```
 
-## Introduction
+## Introduction & Summary
 
 An accurate home price prediction algorithm can reduce volatility in the housing market and take into account existing factors that may not be reflected in a home’s previous selling prices (e.g., new roof, new shopping center, etc.) However, predictive algorithms can also be exceedingly difficult to perfect. A falsely high average estimate in a neighborhood might lead home sellers to list their homes at too high an asking price and dragging out the process of selling their home, thereby introducing friction into the housing market. A falsely low estimate may depress the value of what is oftentimes a homeowner’s most valuable asset.  
 
-This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities and external features like schools, parks, and access to major roads. 
+This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities and external features like schools, parks, and access to major roads. One interesting finding from this process is that a home's location in a middle school zone shows a positive relationship with home prices, but bot elementary or high school zone. 
 
 To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. We tested each featured for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
 
-One interesting finding from this process is which middle school a house exists
-
+After testing and rejecting several features that did not deduce our prediction errors (e.g., distances to nearest park, major road, and middle school), we ultimately settled on the features (dependent variables) below. 
+                        
+1. Location/External Features
+  * Property.City: Miami, Miami City
+  * GEOID: Census tract code
+  * Shore1: distance from shoreline (feet)
+  * MedRent:
+  * pctWhite:
+  * pctPoverty:
+  * 9 binary variables for middle school area: Brownsville, Citrus Grove, Jose de Diego, Georgia Jones-Ayer, Kinloch Park, Madison, Nautilus, Shenandoah, West Miami
+2. Internal Features
+  * LotSize: lot square footage
+  * Age: years since home was built
+  * Bed: number of bedrooms
+  * Bath: number of bathrooms
+  * Stories: number of bathrooms
+  * Pool: extra pool feature (0/1)
+  * Fence: extra fence feature (0/1)
+  * Patio: extra patio feature (0/1)
 
 ## Data
 
 
 ```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
-
 trainprice.sf <- miamiHomesClean.sf %>% 
   filter(toPredict == 0)
 
@@ -394,7 +410,7 @@ trn <- ggplot() +
   labs(title = "Training Data Sale Prices",
        caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
-                      name = "Price ($0-$1M+)", 
+                      name = "Home Price\n($0-$1M+)", 
                       limits=c(10000,1000000),
                       breaks=c(0, 250000, 500000, 750000, 1000000),
                       direction = -1,
@@ -430,7 +446,7 @@ ggplot() +
   labs(title = "Middle School Districts & Home Prices",
        caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
-                      name = "Price ($0-$1M+)", 
+                      name = "Home Price\n($0-$1M+)", 
                       limits=c(10000,1000000),
                       breaks=c(0, 250000, 500000, 750000, 1000000),
                       direction = -1,
@@ -439,19 +455,20 @@ ggplot() +
 
 ```{r white, echo=FALSE, message=FALSE, warning=FALSE}
 colors <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d')
+tracts18$pctWhite100 <- (tracts18$pctWhite)*100
 
 ggplot()+
   annotation_map_tile("cartolight") +
-  geom_sf(data=tracts18, aes(fill = q5(pctWhite)), lwd = 0) +
+  geom_sf(data=tracts18, aes(fill = q5(pctWhite100)), lwd = 0) +
   geom_sf(data=trainprice.sf, aes(color=SalePrice), size=1) + 
   labs(title = "% White Residents (2018)") +
   mapTheme() + 
-  theme(plot.title = element_text(size=22)) + 
   scale_fill_manual(values = colors,
                     name= "% White Residents\n(Quintile Breaks)", 
+                    labels = qBr(tracts18, "pctWhite100"),
                     guide = guide_legend(reverse = TRUE)) +
   scale_color_viridis(option="C", 
-                      name = "Price ($)", 
+                      name = "Home Price\n($0-$1M+)", 
                       limits=c(10000,1000000),
                       breaks=c(0, 250000, 500000, 750000, 1000000),
                       direction = -1,
