@@ -4,6 +4,7 @@ author: "Julian Hartwell & Juliana Zhou"
 date: "October 19, 2020"
 output: 
   html_document:
+    code_folding: hide
     toc: true
     toc_float:
       toc_collapsed: true
@@ -12,7 +13,13 @@ output:
     theme: lumen
 ---
 
-```{r }
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+	error = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
 # --- Setup: Libraries ----
 # Regex parsing package
 library(tidyverse)
@@ -211,8 +218,12 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 }
 
 
-# --- Part 1: Data Wrangling ----
+```
 
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+# --- Part 1: Data Wrangling ----
 miamiHomes <- st_read("studentsData.geojson")
 miamiHomes.sf <- miamiHomes %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326, agr = "constant") %>%
@@ -339,9 +350,7 @@ miamiHomesClean.sf <- miamiHomes.sf %>%
 
 OLSvars <- c('ID', 'Folio', 'SalePrice','Property.City',
             'LotSize','Bed','Bath','Stories','Pool','Fence','Patio', 'ActualSqFt',
-            'Age','toPredict','Shore1','GEOID', 'MedHHInc', 'TotalPop', 'MedRent','pctWhite','pctPoverty', 
-            'Brownsville.MS','CitrusGrove.MS','JosedeDiego.MS','GeorgiaJA.MS', 
-            'KinlochPk.MS','Madison.MS','Nautilus.MS','Shenandoah.MS','WestMiami.MS','geometry')
+            'Age','toPredict','Shore1','GEOID', 'MedHHInc', 'TotalPop', 'MedRent','pctWhite','pctPoverty','Brownsville.MS','CitrusGrove.MS','JosedeDiego.MS','GeorgiaJA.MS', 'KinlochPk.MS','Madison.MS','Nautilus.MS','Shenandoah.MS','WestMiami.MS','geometry')
 
 # --- Part 3: Exploratory Analysis ----
 
@@ -358,9 +367,195 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 ## Methods--------
 ```
-```{r Markdown The first regression we combined our feature engineering variables to see which were statistically significant}
+
+## Introduction
+
+An accurate home price prediction algorithm can reduce volatility in the housing market and take into account existing factors that may not be reflected in a home’s previous selling prices (e.g., new roof, new shopping center, etc.) However, predictive algorithms can also be exceedingly difficult to perfect. A falsely high average estimate in a neighborhood might lead home sellers to list their homes at too high an asking price and dragging out the process of selling their home, thereby introducing friction into the housing market. A falsely low estimate may depress the value of what is oftentimes a homeowner’s most valuable asset.  
+
+This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities like schools, parks, and access to major roads. To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. Then we tested each for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
+
+One interesting finding from this process is which middle school a house exists
+
+## Data 
+```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
+
+trainprice.sf <- miamiHomesClean.sf %>% 
+  filter(toPredict == 0)
+
+# Map Home Prices
+allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
+  st_sf()
+
+# Writing predictions into SalePrice variable for mapping
+allprices.sf$SalePrice[allprices.sf$SalePrice == 0] <- NA   
+allprices.sf$SalePrice <- ifelse(is.na(allprices.sf$SalePrice), 
+                                 allprices.sf$pred, allprices.sf$SalePrice)
+
+# All Home Prices (Predicted and Training)
+ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill = 'transparent') + 
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  labs(title = "Home Prices",
+       subtitle = "Miami & Miami Beach, FL",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($0-$1M+)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95) 
 ```
-```{r Markdown the second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2}
+
+``` {r test v. train, echo=FALSE, message=FALSE, warning=FALSE}
+# Map of Predicted Home Prices vs. Training
+tst <- ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data=map_preds, aes(color=pred),
+          show.legend = "line", size = 1) + 
+  labs(title = "Predicted Home Prices") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97)
+trn <- ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data=trainprice.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  labs(title = "Training Set Sale Prices",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($0-$1M+)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97) 
+ggarrange(tst, trn, ncol = 2, nrow = 1, 
+          common.legend = TRUE, legend = "right")
+
+```
+
+``` {r shore, echo=FALSE, message=FALSE, warning=FALSE}
+# Map of Distance to Shore
+ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data=miamiHomes.sf, aes(colour=Shore.mile),
+          show.legend = "line", size= 1) + 
+  labs(title = "Distance from Shoreline",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_colour_viridis(name = "Distance (miles)")
+
+```
+
+``` {r middle school, echo=FALSE, message=FALSE, warning=FALSE}
+### Middle School Areas
+# Retrieve coordinates for school labels
+midschool.pts <- sf::st_point_on_surface(midschool)
+midschool.coords <- as.data.frame(sf::st_coordinates(midschool.pts))
+midschool.coords$NAME <- midschool$NAME
+
+# Map of Middle School Areas
+ggplot() + 
+  annotation_map_tile(type = 'cartolight', progress = 'none') +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  geom_sf(data = midschool, fill = "#d3e9ff", alpha =.4, color = "#498cd3", lwd = .8)+
+  labs(title = "Middle School Districts & Home Prices",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($0-$1M+)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      na.value = .97) 
+```
+
+
+```{r summary statistics, echo=FALSE, message=FALSE, warning=FALSE}
+
+#Summary Statistics Table
+sumstat.df <- miamiHomes.train %>%
+  st_drop_geometry() %>%
+  mutate(Miami.dummy = ifelse(Property.City == 'Miami',1,0)) %>%
+  dplyr::select(SalePrice, Miami.dummy,GEOID, 
+                LotSize, Age, Stories, Bed, Bath, Pool, Fence, Patio, 
+                Shore1, MedRent, pctWhite, pctPoverty, 
+                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
+                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
+
+stargazer(sumstat.df, title="Summary Statistics", results ='asis', message=FALSE, type='html', 
+          summary.stat = c('n','mean','sd','min','max'))
+
+```
+
+```{r correlation matrix, echo=FALSE, message=FALSE, warning=FALSE}
+###Correlation Matrix
+# Create a new subset of the training data with geometry dropped
+numericVars <- miamiHomesClean.sf %>% 
+  st_drop_geometry() %>%
+  filter(toPredict == 0) %>%
+  filter(SalePrice <= 1000000) %>%
+  dplyr::select(-ID, -Folio) %>%
+  select_if(is.numeric) %>% 
+  na.omit() %>%
+  rename(Shore_Distance = Shore1)
+
+# Plot correlation matrix
+ggcorrplot(
+  round(cor(numericVars), 1), 
+  p.mat = cor_pmat(numericVars),
+  colors = c("#FA7800", "white", "#25CB10"),
+  type="lower",
+  insig = "blank") +  
+  labs(title = "Correlation across numeric variables") +
+  geom_rect(aes(xmin = 0, xmax = 24.5, ymin = 0.25, ymax = 1.75),
+            fill = "transparent", color = "red", size = 1)
+
+```
+
+```{r Summary Statistics, echo=FALSE, message=FALSE, warning=FALSE}
+# Home price correlation scatterplots 
+a <- ggplot(trainprice.sf, aes(y=SalePrice, x = ActualSqFt)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  labs(title = "Price vs. SqFt (Actual)")+
+  xlab(label = 'Square Footage')
+
+b <- ggplot(trainprice.sf, aes(y=SalePrice, x = Shore1/5280)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  labs(title = "Price vs. Shore Distance")+
+  xlab(label = 'Distance (miles)')
+
+c <- ggplot(trainprice.sf, aes(y=SalePrice, x = MedRent)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  labs(title = "Price vs. Avg Rent (Tract)")+
+  xlab(label='Median HHI')
+
+d <- ggplot(trainprice.sf, aes(y=SalePrice, x = Age)) +
+  geom_point() +
+  geom_smooth(method = "lm")+
+  labs(title = "Price vs. Home Age")+
+  xlab(label='Age')
+
+ggarrange(a,b,c,d, ncol = 2, nrow = 2)
+
+```
+
+
+The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
+
+```{r regression, message=FALSE, warning=FALSE, include=FALSE}
 
 
 Reg1 <- lm(miamiHomes.train$SalePrice ~ ., data = miamiHomes.train %>%
@@ -380,14 +575,13 @@ summ(Reg1)
 stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
 
 
-
 #GEOID R2 = .3, MailingZip =.4, PropertyZip =.9
 
 ```
-```{r Part 4 - Train/Test Split }
-```
-```{r Markdown: Same features as are 2nd model, but similar R2 showing that its generalizable with a simple test train split}
 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Same features as our 2nd model
 # set random seed
 set.seed(31711)
 
@@ -408,8 +602,9 @@ reg2_split <- lm(SalePrice ~ ., data = miami.training %>%
 summary(reg2_split)
 
 ```
-```{r - Calculating MAE and MAPE for a single test test}
 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Calculating MAE and MAPE for a single test test
 mape <- function(actual,pred){
   mape <- mean(abs((actual - pred)/actual))*100
   return (mape)
@@ -423,13 +618,10 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
   knitr::kable()
   
 
-
-
 #The neighborhood variables clearly make our model better, but could still be overfitting
-
-
 ```
-```{r K Fold Cross Validation }
+
+```{r K-Fold Cross Validation, message=FALSE, warning=FALSE, echo=FALSE}
 
 fitControl <- trainControl(method = "cv", 
                            number = 100,
@@ -480,14 +672,16 @@ ggplot(regCV2plot,aes(obs,pred)) +
   labs(title="Predicted sale price as a function of observed price",
        subtitle="Orange line represents a perfect prediction; Green line represents prediction",
        x="Sale Price",
-       y="Predicted Price") +
+       y="Predicted Price",
+       caption='Figure x.x') +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
 
 
 
 ```
-```{r Outputting our CV predictions to CV}
+
+```{r Outputting our CV predictions to CV, echo=FALSE, message=FALSE, warning=FALSE}
 
 # Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
 # Shore1, GEOID, MedRent, pctWhite, pctPoverty
@@ -520,170 +714,6 @@ write.csv(output_preds, "Florid-API Keys.csv")
 
 #our best model was reg.cv2
 
-# --- Markdown: Introduction ----
-
-```{r Introductory Maps NONE OF THESE CHARTS WORKED FOR ME - JH}
-
-# --- Markdown: Data ----
-trainprice.sf <- miamiHomesClean.sf %>% 
-  filter(toPredict == 0)
-
-# Map Home Prices
-allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
-  st_sf()
-
-# Writing predictions into SalePrice variable for mapping
-allprices.sf$SalePrice[allprices.sf$SalePrice == 0] <- NA   
-allprices.sf$SalePrice <- ifelse(is.na(allprices.sf$SalePrice), 
-                                 allprices.sf$pred, allprices.sf$SalePrice)
-
-# All Home Prices (Predicted and Training)
-ggplot() + 
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill = 'transparent') + 
-  geom_sf(data=allprices.sf, aes(color=SalePrice),
-          show.legend = "line", size = 1) + 
-  labs(title = "Home Prices",
-       subtitle = "Miami & Miami Beach, FL",
-       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
-  scale_color_viridis(option="C", 
-                      name = "Price ($)", 
-                      limits=c(10000,1000000),
-                      breaks=c(0, 250000, 500000, 750000, 1000000),
-                      direction = -1,
-                      begin = 0,
-                      end = .95,
-                      na.value = .95) 
-
-# Map of Predicted Home Prices vs. Training
-tst <- ggplot() + 
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=map_preds, aes(color=pred),
-          show.legend = "line", size = 1) + 
-  labs(title = "Predicted Home Prices") +
-  scale_color_viridis(option="C", 
-                      name = "Price ($)", 
-                      limits=c(10000,1000000),
-                      breaks=c(0, 250000, 500000, 750000, 1000000),
-                      direction = -1,
-                      na.value = .97)
-trn <- ggplot() + 
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=trainprice.sf, aes(color=SalePrice),
-          show.legend = "line", size = 1) + 
-  labs(title = "Training Set Sale Prices",
-       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
-  scale_color_viridis(option="C", 
-                      name = "Price ($)", 
-                      limits=c(10000,1000000),
-                      breaks=c(0, 250000, 500000, 750000, 1000000),
-                      direction = -1,
-                      na.value = .97) 
-ggarrange(tst, trn, ncol = 2, nrow = 1, 
-          common.legend = TRUE, legend = "right")
-
-# Map of Distance to Shore
-# runs without annotion_map_tile
-ggplot() + 
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=miamiHomes.sf, aes(colour=Shore.mile),
-          show.legend = "line", size= 1) + 
-  labs(title = "Distance from Shoreline",
-       caption = "\U00a9 OpenStreetMap contributors") +
-  scale_colour_viridis(name = "Distance (miles)")
-
-### Middle School Areas
-# Retrieve coordinates for school labels
-midschool.pts <- sf::st_point_on_surface(midschool)
-midschool.coords <- as.data.frame(sf::st_coordinates(midschool.pts))
-midschool.coords$NAME <- midschool$NAME
-
-# Map of Middle School Areas
-ggplot() + 
-  annotation_map_tile(type = 'cartolight', progress = 'none') +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=allprices.sf, aes(color=SalePrice),
-          show.legend = "line", size = 1) + 
-  geom_sf(data = midschool, fill = "#d3e9ff", alpha =.4, color = "#498cd3", lwd = .8)+
-  labs(title = "Middle Schools & Home Prices",
-       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
-  scale_color_viridis(option="C", 
-                      name = "Price ($)", 
-                      limits=c(10000,1000000),
-                      breaks=c(0, 250000, 500000, 750000, 1000000),
-                      direction = -1,
-                      na.value = .97) 
-```
-
-
-```{r Summary Statistics}
-
-#Summary Statistics Table
-sumstat.df <- miamiHomes.train %>%
-  st_drop_geometry() %>%
-  mutate(Miami.dummy = ifelse(Property.City == 'Miami',1,0)) %>%
-  dplyr::select(SalePrice, Miami.dummy,GEOID, 
-                LotSize, Age, Stories, Bed, Bath, Pool, Fence, Patio, 
-                Shore1, MedRent, pctWhite, pctPoverty, 
-                Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
-                KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
-
-stargazer(sumstat.df, title="Summary Statistics", type='html', 
-          summary.stat = c('n','mean','sd','min','max'), out='Summary_Statistics.htm')
-
-###Correlation Matrix
-# Create a new subset of the training data with geometry dropped
-numericVars <- miamiHomesClean.sf %>% 
-  st_drop_geometry() %>%
-  filter(toPredict == 0) %>%
-  filter(SalePrice <= 1000000) %>%
-  dplyr::select(-ID, -Folio) %>%
-  select_if(is.numeric) %>% 
-  na.omit() %>%
-  rename(ShoreDistance = Shore1) 
-
-# Plot correlation matrix
-ggcorrplot(
-  round(cor(numericVars), 1), 
-  p.mat = cor_pmat(numericVars),
-  colors = c("#FA7800", "white", "#25CB10"),
-  type="lower",
-  insig = "blank") +  
-  labs(title = "Correlation across numeric variables") +
-  geom_rect(aes(xmin = 0, xmax = 24.5, ymin = 0.25, ymax = 1.75),
-            fill = "transparent", color = "red", size = 1)
-
-# Home price correlation scatterplots 
-a <- ggplot(trainprice.sf, aes(y=SalePrice, x = ActualSqFt)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  labs(title = "Price vs. SqFt (Actual)")+
-  xlab(label = 'Square Footage')
-
-b <- ggplot(trainprice.sf, aes(y=SalePrice, x = Shore1/5280)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  labs(title = "Price vs. Shore Distance")+
-  xlab(label = 'Distance (miles)')
-
-c <- ggplot(trainprice.sf, aes(y=SalePrice, x = MedRent)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  labs(title = "Price vs. Avg Rent (Tract)")+
-  xlab(label='Median HHI')
-
-d <- ggplot(trainprice.sf, aes(y=SalePrice, x = Age)) +
-  geom_point() +
-  geom_smooth(method = "lm")+
-  labs(title = "Price vs. Home Age")+
-  xlab(label='Age')
-
-ggarrange(a,b,c,d, ncol = 2, nrow = 2)
-
-```
 # --- Markdown: Method ----
 
 
@@ -771,7 +801,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 ```
 
 
-```{r Map of Neighborhood and MAPEs}
+```{r Map of Neighborhood and MAPEs, echo=FALSE, message=FALSE, warning=FALSE}
 #Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
 PredictMap <-
@@ -807,14 +837,18 @@ map_preds_sum <- map_preds %>%
   summarise(meanMAE = mean(SalePrice.AbsError))
 
 ggplot() +
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
   geom_sf(data = miamiHomesClean.sf %>% 
             left_join(st_drop_geometry(map_preds_sum), by = "GEOID"),
-          aes(fill = q5(meanMAE))) +
+          aes(color = q5(meanMAE)), size = .8) +
   scale_fill_manual(values = palette5,
                     labels=qBr(nhood_sum,"meanMAE"),
                     name="Quintile\nBreaks") +
   mapTheme() +
-  labs(title="Absolute sale price errors on the OOF set by Neighborhood")
+  labs(title="Absolute sale price errors on the out-of-fold set by Neighborhood",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.")
+  
 
 #Scatter of MAPE & Mean Price by Neighborhood
 
@@ -826,7 +860,7 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
 
 ```
 
-```{r Generalizability of Income}
+```{r Generalizability of Income, echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
 #Testing Generalizability of Median Household Income Split
 
 median(as.numeric(miami.test$MedHHInc), na.rm=TRUE)
@@ -839,12 +873,14 @@ miamiRich <- miami.test %>%
 miamiPoorLM <- 
   train(SalePrice ~ ., data = miamiPoor %>%
           st_drop_geometry() %>%
-          dplyr::select(-ActualSqFt, -TotalPop, 
+          dplyr::select(-ID, -Property.City, -ActualSqFt, -TotalPop, 
                         -MedHHInc, -toPredict,
-                        -Regression, -SalePrice.Predict, -SalePrice.Error, -SalePrice.AbsError, -SalePrice.APE), 
+                        -Regression, -SalePrice.Predict, 
+                        -SalePrice.Error, -SalePrice.AbsError,
+                        -SalePrice.APE), 
         method = "lm", 
         trControl = fitControl, 
-        na.action = na.omit)
+        na.action = na.pass)
 
 miamiPoorLM
 
@@ -859,11 +895,10 @@ miamiRichLM <-
         na.action = na.omit)
 
 miamiRichLM
+miamiRichLM
 
-
-print(kable(miamiPoorLM$results))
-print(kable(miamiRichLM$results))
-
-
-rmarkdown::render("MUSA_Miami_Midterm.R")
+kable(miamiPoorLM$results)
+```
+```{r}
+kable(miamiRichLM$results)
 ```
