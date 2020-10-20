@@ -13,12 +13,12 @@ output:
     theme: lumen
 ---
 
-```{r setup, message=FALSE, warning=FALSE}
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
 knitr::opts_chunk$set(
 	error = FALSE,
 	message = FALSE,
 	warning = FALSE,
-	include = FALSE
+	echo = FALSE
 )
 # --- Setup: Libraries ----
 # Regex parsing package
@@ -221,7 +221,7 @@ multipleRingBuffer <- function(inputPolygon, maxDistance, interval)
 ```
 
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE, echo=FALSE}
 
 # --- Part 1: Data Wrangling ----
 miamiHomes <- st_read("studentsData.geojson")
@@ -364,8 +364,6 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 # cor.test(miamiHomes.train$ActualSqFt, miamiHomes.train$SalePrice, method = "pearson")
 # Rest of the correlations in Data section
 
-
-## Methods--------
 ```
 
 ## Introduction
@@ -377,7 +375,9 @@ This project attempts to predict housing prices in metropolitan Miami by taking 
 One interesting finding from this process is which middle school a house exists
 
 The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
+
 ## Data
+
 ```{r home prices, echo=FALSE, message=FALSE, warning=FALSE}
 
 trainprice.sf <- miamiHomesClean.sf %>% 
@@ -402,7 +402,7 @@ trn
 
 ```
 
-``` {r shore, echo=FALSE, message=FALSE, warning=FALSE}
+``` {r shore, message=FALSE, warning=FALSE}
 # Map of Distance to Shore
 ggplot() + 
   annotation_map_tile("cartolight") +
@@ -415,20 +415,15 @@ ggplot() +
 
 ```
 
-``` {r middle school, echo=FALSE, message=FALSE, warning=FALSE}
-### Middle School Areas
-# Retrieve coordinates for school labels
-midschool.pts <- sf::st_point_on_surface(midschool)
-midschool.coords <- as.data.frame(sf::st_coordinates(midschool.pts))
-midschool.coords$NAME <- midschool$NAME
+``` {r middle school, message=FALSE, warning=FALSE}
 
+### Middle School Areas
 # Map of Middle School Areas
 ggplot() + 
   annotation_map_tile(type = 'cartolight', progress = 'none') +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=allprices.sf, aes(color=SalePrice),
-          show.legend = "line", size = 1) + 
   geom_sf(data = midschool, fill = "#d3e9ff", alpha =.4, color = "#498cd3", lwd = .8)+
+  geom_sf(data=trainprice.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
   labs(title = "Middle School Districts & Home Prices",
        caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
@@ -439,7 +434,7 @@ ggplot() +
                       na.value = .97) 
 ```
 
-```{r correlation matrix, echo=FALSE, message=FALSE, warning=FALSE}
+```{r correlation matrix, message=FALSE, warning=FALSE}
 ###Correlation Matrix
 # Create a new subset of the training data with geometry dropped
 numericVars <- miamiHomesClean.sf %>% 
@@ -465,7 +460,7 @@ ggcorrplot(
 ```
 
 
-```{r summary statistics, echo=FALSE, message=FALSE, warning=FALSE}
+```{r summary statistics, message=FALSE, warning=FALSE, include=FALSE}
 
 #Summary Statistics Table
 sumstat.df <- miamiHomes.train %>%
@@ -482,7 +477,7 @@ stargazer(sumstat.df, title="Summary Statistics", results ='asis', message=FALSE
 
 ```
 
-```{r Summary Statistics, echo=FALSE, message=FALSE, warning=FALSE}
+```{r Summary Statistics, message=FALSE, warning=FALSE}
 # Home price correlation scatterplots 
 a <- ggplot(trainprice.sf, aes(y=SalePrice, x = ActualSqFt)) +
   geom_point() +
@@ -515,7 +510,6 @@ ggarrange(a,b,c,d, ncol = 2, nrow = 2)
 
 ## Method
 
-
 ```{r regression, message=FALSE, warning=FALSE, include=FALSE}
 
 
@@ -541,7 +535,7 @@ stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html"
 ```
 
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 # Same features as our 2nd model
 # set random seed
 set.seed(31711)
@@ -564,7 +558,7 @@ summary(reg2_split)
 
 ```
 
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 # Calculating MAE and MAPE for a single test test
 mape <- function(actual,pred){
   mape <- mean(abs((actual - pred)/actual))*100
@@ -582,7 +576,12 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
 #The neighborhood variables clearly make our model better, but could still be overfitting
 ```
 
-```{r K-Fold Cross Validation, message=FALSE, warning=FALSE, echo=FALSE}
+
+#our best model was reg.cv2
+
+## Results
+
+```{r histogram, message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
 
 fitControl <- trainControl(method = "cv", 
                            number = 100,
@@ -613,6 +612,38 @@ MAE_hist <- as.data.frame(reg.cv2$pred) %>%
   group_by(Resample) %>%
   summarize(MAE = mean(ABS_error, na.rm = T))
 
+```
+
+```{r oof preds, message=FALSE, warning=FALSE, include=FALSE, paged.print=TRUE}
+# Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
+# Shore1, GEOID, MedRent, pctWhite, pctPoverty
+# GEOID = .8337, property zip = .99, mailing zip 0.845
+
+# How do we interpret the spread of values between the folds?
+# extract predictions from CV object
+cv_preds <- reg.cv2$pred
+
+## Create dataset with "out of fold" predictions and original data
+map_preds <- miamiHomes.test %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(SalePrice.AbsError = abs(pred - SalePrice))
+
+```
+
+```{r output, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#output to CSV
+
+output_preds <- map_preds %>%
+  dplyr::select(pred, Folio) %>%
+  mutate(team_name = "Florid-API Keys") %>%
+  rename(prediction = pred)
+
+write.csv(output_preds, "Florid-API Keys.csv")
+
+```
+
+```{r , message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
 ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
   labs(title="Histogram of Cross Validation MAE",
        caption="Based on 100 Folds")+
@@ -624,6 +655,9 @@ ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
 regCV2plot <- as.data.frame(reg.cv2$pred)
 
 
+```
+
+```{r prediction vs. observed, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
   geom_point() +
   stat_smooth(aes(obs, obs), 
@@ -637,45 +671,7 @@ ggplot(regCV2plot,aes(obs,pred)) +
        caption='Figure x.x') +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
-
-
-
 ```
-
-```{r Outputting our CV predictions to CV, echo=FALSE, message=FALSE, warning=FALSE}
-
-# Folio, Property.City, LotSize, Bed, Bath, Stories, Pool, Fence, Patio, ActualSqFt, Age, 
-# Shore1, GEOID, MedRent, pctWhite, pctPoverty
-# GEOID = .8337, property zip = .99, mailing zip 0.845
-
-# How do we interpret the spread of values between the folds?
-# extract predictions from CV object
-cv_preds <- reg.cv2$pred
-# compare number of observations between data sets
-nrow(miamiHomes.train)
-nrow(cv_preds)
-
-## Create dataset with "out of fold" predictions and original data
-map_preds <- miamiHomes.test %>% 
-  rowid_to_column(var = "rowIndex") %>% 
-  left_join(cv_preds, by = "rowIndex") %>% 
-  mutate(SalePrice.AbsError = abs(pred - SalePrice))
-
-
-#output to CSV
-
-output_preds <- map_preds %>%
-  dplyr::select(pred, Folio) %>%
-  mutate(team_name = "Florid-API Keys") %>%
-  rename(prediction = pred)
-
-write.csv(output_preds, "Florid-API Keys.csv")
-
-```
-
-#our best model was reg.cv2
-
-## Results
 
 ``` {r test v. train, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
@@ -703,7 +699,6 @@ tst <- ggplot() +
                       na.value = .95)
 ggarrange(tst, trn, ncol = 2, nrow = 1, 
           common.legend = TRUE, legend = "right")
-
 ```
 
 ```{r spatial corr of errors, echo=FALSE, message=FALSE, warning=FALSE}
@@ -787,20 +782,24 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 ```
 
 
-```{r Map of Neighborhood and MAPEs, echo=FALSE, message=FALSE, warning=FALSE}
+```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
 
 PredictMap <-
   miamiHomesClean.sf %>%
   mutate(SalePrice.Predict = predict(finaltraining, miamiHomesClean.sf))
 
-ggplot() +
-  geom_sf(data = PredictMap, aes(fill = q5(SalePrice.Predict))) +
-  scale_fill_manual(values = palette5,
-                    labels=qBr(PredictMap,"SalePrice.Predict"),
-                    name="Quintile\nBreaks") +
-  mapTheme() +
-  labs(title="Precited Prices of All Homes")
+#This isn't working for me b/c R saying you need 6 colors but palette5 only has 5?
+#But don't think we need it, I already made a mape of the predicted prices (in that ggarrange plot)
+#ggplot() +
+  #annotation_map_tile("cartolight") +
+  #geom_sf(data=miami.base, aes(fill='transparent')) +
+  #geom_sf(data = PredictMap, aes(fill = q5(SalePrice.Predict))) +
+  #labs(title="Precited Prices of All Homes") +
+  #scale_fill_manual(values = palette5,
+                    #labels=qBr(PredictMap,"SalePrice.Predict"),
+                    #name="Quintile\nBreaks") +
+  #mapTheme() 
 
 #This really needs a basemap or something but it works
 
@@ -813,15 +812,18 @@ nhood_sum <- miami.test %>%
             meanPrediction = mean(SalePrice.Predict, na.rm = T),
             meanMAE = mean(SalePrice.AbsError, na.rm = T))
 
-nhood_sum %>% 
-  st_drop_geometry %>%
-  arrange(desc(meanMAE)) %>% 
-  kable() %>% kable_styling()
+#nhood_sum %>% 
+  #st_drop_geometry %>%
+  #arrange(desc(meanMAE)) %>% 
+  #kable() %>% kable_styling()
 
 map_preds_sum <- map_preds %>% 
   group_by(GEOID) %>% 
   summarise(meanMAE = mean(SalePrice.AbsError))
 
+```
+
+````{r abs err map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 ggplot() +
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
@@ -842,11 +844,9 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
      main = "Scatter of Mean Price and Mean MAE by Census Tract", 
      xlab = "Mean Price",
      ylab = "Mean MAE")
-
-
 ```
 
-```{r Generalizability of Income, echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+```{r income generalizability, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Testing Generalizability of Median Household Income Split
 
 median(as.numeric(miami.test$MedHHInc), na.rm=TRUE)
@@ -883,8 +883,8 @@ miamiRichLM <-
 miamiRichLM
 miamiRichLM
 
-kable(miamiPoorLM$results)
-```
 ```{r}
+kable(miamiPoorLM$results)
+
 kable(miamiRichLM$results)
 ```
