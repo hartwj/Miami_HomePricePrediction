@@ -1,7 +1,7 @@
 ---
 title: "MUSA508 Midterm: Miami Home Price Prediction Markdown"
 author: "Julian Hartwell & Juliana Zhou"
-date: "October 19, 2020"
+date: "October 20, 2020"
 output: 
   html_document:
     code_folding: hide
@@ -369,11 +369,12 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 An accurate home price prediction algorithm can reduce volatility in the housing market and take into account existing factors that may not be reflected in a home’s previous selling prices (e.g., new roof, new shopping center, etc.) However, predictive algorithms can also be exceedingly difficult to perfect. A falsely high average estimate in a neighborhood might lead home sellers to list their homes at too high an asking price and dragging out the process of selling their home, thereby introducing friction into the housing market. A falsely low estimate may depress the value of what is oftentimes a homeowner’s most valuable asset.  
 
-This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities like schools, parks, and access to major roads. To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. Then we tested each for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
+This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities and external features like schools, parks, and access to major roads. 
+
+To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. We tested each featured for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
 
 One interesting finding from this process is which middle school a house exists
 
-The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2
 
 ## Data
 
@@ -579,6 +580,8 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
 #our best model was reg.cv2
 
 ## Results
+
+The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2.
 
 ```{r histogram, message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
 
