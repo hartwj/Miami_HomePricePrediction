@@ -247,6 +247,9 @@ tracts18 <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
+tracts18 <- tracts18[miami.base,]
+
+
 
 ### Middle School
 midschool <- 
@@ -653,6 +656,45 @@ d <- ggplot(trainprice.sf, aes(y=SalePrice, x = Age)) +
   xlab(label='Age')
 
 ggarrange(a,b,c,d, ncol = 2, nrow = 2)
+
+colors <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d')
+ggplot()+
+  annotation_map_tile("cartolight") +
+  geom_sf(data=tracts18, aes(fill = q5(pctPoverty)), lwd = 0) +
+  geom_sf(data=trainprice.sf, aes(color=SalePrice), size=1) + 
+  labs(title = "Poverty Rate (2018)") +
+  mapTheme() + 
+  theme(plot.title = element_text(size=22)) + 
+  scale_fill_manual(values = colors,
+                    name= "% Poverty\n(Quintile Breaks)", 
+                    guide = guide_legend(reverse = TRUE)) +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95)
+
+ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill = 'transparent') + 
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
+          show.legend = "line", size = 1) + 
+  labs(title = "Home Prices",
+       subtitle = "Miami & Miami Beach, FL",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95) 
+  
+
 
 # --- Markdown: Method ----
 

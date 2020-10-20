@@ -274,6 +274,8 @@ tracts18 <-
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0)) %>%
   dplyr::select(-Whites, -TotalPoverty) 
 
+tracts18 <- tracts18[miami.base,]
+
 
 ### Middle School
 midschool <- 
@@ -435,6 +437,29 @@ ggplot() +
                       na.value = .97) 
 ```
 
+```{r white, echo=FALSE, message=FALSE, warning=FALSE}
+colors <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d')
+
+ggplot()+
+  annotation_map_tile("cartolight") +
+  geom_sf(data=tracts18, aes(fill = q5(pctWhite)), lwd = 0) +
+  geom_sf(data=trainprice.sf, aes(color=SalePrice), size=1) + 
+  labs(title = "% White Residents (2018)") +
+  mapTheme() + 
+  theme(plot.title = element_text(size=22)) + 
+  scale_fill_manual(values = colors,
+                    name= "% White Residents\n(Quintile Breaks)", 
+                    guide = guide_legend(reverse = TRUE)) +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95)
+```
+
 ```{r correlation matrix, message=FALSE, warning=FALSE}
 ###Correlation Matrix
 # Create a new subset of the training data with geometry dropped
@@ -461,21 +486,21 @@ ggcorrplot(
 ```
 
 
-```{r summary stat table, message=FALSE, warning=FALSE, include=FALSE}
+```{r summary stat, message=FALSE, warning=FALSE, include=FALSE}
 
 #Summary Statistics Table
 sumstat.df <- miamiHomes.train %>%
   st_drop_geometry() %>%
-  mutate(Miami.dummy = ifelse(Property.City == 'Miami',1,0)) %>%
-  dplyr::select(SalePrice, Miami.dummy,GEOID, 
+  dplyr::select(SalePrice, Property.City,GEOID, 
                 LotSize, Age, Stories, Bed, Bath, Pool, Fence, Patio, 
                 Shore1, MedRent, pctWhite, pctPoverty, 
                 Brownsville.MS, CitrusGrove.MS, JosedeDiego.MS, GeorgiaJA.MS, 
                 KinlochPk.MS, Madison.MS, Nautilus.MS, Shenandoah.MS, WestMiami.MS) 
+```
 
-stargazer(sumstat.df, title="Summary Statistics", results ='asis', message=FALSE, type='html', 
+```{r summ table, message=FALSE, warning=FALSE, results = "asis"}
+stargazer(sumstat.df, title="Summary Statistics", type='html', 
           summary.stat = c('n','mean','sd','min','max'))
-
 ```
 
 ```{r scatterplots, message=FALSE, warning=FALSE}
@@ -528,6 +553,9 @@ summary(Reg1)
 summary(Reg2)
 summ(Reg1)
 
+```
+
+```{r stargazer,  message=FALSE, warning=FALSE, results="asis"}
 stargazer(Reg1, Reg2, title="Training Set LM Results", align=TRUE, type = "html", out = "Regression_Results.htm")
 
 
