@@ -375,25 +375,27 @@ This project attempts to predict housing prices in metropolitan Miami by taking 
 
 To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. We tested each featured for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
 
-After testing and rejecting several features that did not deduce our prediction errors (e.g., distances to nearest park, major road, and middle school), we ultimately settled on the features (dependent variables) below. 
+After testing and rejecting several features that did not deduce our prediction errors (e.g., distances to nearest park, major road, and middle school), we ultimately settled on the features (dependent variables) listed below. 
                         
 1. Location/External Features
-  * Property.City: Miami, Miami City
-  * GEOID: Census tract code
-  * Shore1: distance from shoreline (feet)
-  * MedRent:
-  * pctWhite:
-  * pctPoverty:
-  * 9 binary variables for middle school area: Brownsville, Citrus Grove, Jose de Diego, Georgia Jones-Ayer, Kinloch Park, Madison, Nautilus, Shenandoah, West Miami
+    * Property.City: Miami, Miami City
+    * GEOID: Census tract code
+    * Shore1: distance from shoreline (feet)
+    * MedRent: median average rent by census tract
+    * pctWhite: % residents who identify as White
+    * pctPoverty: % residents below poverty line
+    * 9 binary variables for middle school area: Brownsville, Citrus Grove, Jose de Diego, Georgia Jones-Ayer, Kinloch Park, Madison, Nautilus, Shenandoah, West Miami
 2. Internal Features
-  * LotSize: lot square footage
-  * Age: years since home was built
-  * Bed: number of bedrooms
-  * Bath: number of bathrooms
-  * Stories: number of bathrooms
-  * Pool: extra pool feature (0/1)
-  * Fence: extra fence feature (0/1)
-  * Patio: extra patio feature (0/1)
+    * LotSize: lot square footage
+    * Age: years since home was built
+    * Bed: number of bedrooms
+    * Bath: number of bathrooms
+    * Stories: number of bathrooms
+    * Pool: extra pool feature (0/1)
+    * Fence: extra fence feature (0/1)
+    * Patio: extra patio feature (0/1)
+
+
 
 ## Data
 
