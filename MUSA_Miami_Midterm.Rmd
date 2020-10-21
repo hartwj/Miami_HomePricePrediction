@@ -712,16 +712,20 @@ mape <- function(actual,pred){
 reg2MAE <- caret::MAE(predict(reg2_split), miami.test$SalePrice)
 reg2MAPE <- mape(miami.test$SalePrice,predict(reg2_split))
 
+```
 
-cat("Single Test MAE and MAPE"," \n","Test MAE: ", as.integer(reg2MAE), " \n","Test MAPE: ", as.integer(reg2MAPE)) %>%
-  knitr::kable()
+```{r mae table, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+mae_table <- data.frame(Test = c("Test MAE:", "Test MAPE:"), Values = c(reg2MAE, reg2MAPE))
+                
+kable(mae_table)
+
   
 
 #The neighborhood variables clearly make our model better, but could still be overfitting
 ```
 
 These are the high level results of our final model based on the features discussed in the introduction. We were able to explain about 75% of the variance in sale prices, while our distance from sale price average about +/- $66,000. 
-```{r histogram, echo=FALSE, message=FALSE, warning=FALSE}
+```{r histogram, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 
 fitControl <- trainControl(method = "cv", 
                            number = 100,
@@ -740,12 +744,11 @@ reg.cv2 <-
         trControl = fitControl, 
         na.action = na.omit)
 
-print(reg.cv2)
+```
 
-#Providing Results of Cross Validation Test
-reg.cv2$results %>%
-  knitr::kable()
-
+## Results of Cross Validation Test
+```{r cv results, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+kable(reg.cv2$results)
 
 ```
 
@@ -763,7 +766,6 @@ map_preds <- miamiHomes.test %>%
   rowid_to_column(var = "rowIndex") %>% 
   left_join(cv_preds, by = "rowIndex") %>% 
   mutate(SalePrice.AbsError = abs(pred - SalePrice))
-
 ```
 
 ```{r output, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
@@ -778,6 +780,8 @@ write.csv(output_preds, "Florid-API Keys.csv")
 
 ```
 
+
+## Histogram of Cross Validation Errors (MAE)
 
 The histogram below examines our final cross validation model run on 100 folds. The MAE, or Mean Absolute Error, measures the difference in actual and predicted sales price across each test subset. Our errors clustered between $50k and $75k. From this plot alone, it is difficult to say whether our model is generalizable.
 ```{r mae histogram, message=FALSE, warning=FALSE, echo=FALSE}
@@ -800,6 +804,8 @@ regCV2plot <- as.data.frame(reg.cv2$pred)
 
 
 ```
+
+## Scatterplot of Predicted and Observed Sale Prices
 Our final model was much more accurate at predicting home prices at lower values. Removing outliers above $1M improves our overall mean errors, but limits our predictive power at higher home values. 
 ```{r pred v obs plot, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
@@ -815,6 +821,7 @@ ggplot(regCV2plot,aes(obs,pred)) +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
 ```
+
 The following two charts show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model struggles to capture the higher-priced homes in dark purple.
 ``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
@@ -844,6 +851,7 @@ ggarrange(tst, trn, ncol = 2, nrow = 1,
           common.legend = TRUE, legend = "right")
 ```
 
+## Spatial Errors
 ```{r spatial corr of errors, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 # Is there a spatial correlation of errors?
 
@@ -887,7 +895,23 @@ neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
 miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 ```
+
 Home prices are spatially autocorrelated with neighbors according to our model. In addition, the bottom chart shows that errors are also spacially correlated with neighbors. 
+```{r residuals, echo=FALSE, warning=FALSE, message=FALSE}
+# Residual Map
+ggplot() +
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data = miami.test,
+          aes(color = SalePrice.Error), size = 1.5) +
+  mapTheme() +
+  labs(title="Errors by Neighborhood (MAPE)",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  scale_color_viridis(name = "Map of Errors\n(Residuals)",
+                      direction = -1)
+
+```
+
 ```{r, spatial lag err plots, echo=FALSE, message=FALSE, warning=FALSE}
 # Spatial Lag Error Plots
 ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
@@ -926,8 +950,9 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 ```
 
+## Combined Total Sale Prices (Training and Test)
 The chart below looks at all 3503 observations from the dataset, including those where no sale price is known. It applies our final model predictions. 
-```{r Predicted Values when toPredict is 0 and 1}
+```{r Predicted Values when toPredict is 0 and 1, warning=FALSE, echo=FALSE, message=FALSE}
 #Updated this, hopefully it works
 
 PredictMap <-
@@ -950,9 +975,10 @@ PredictMap <-
 ggplot() + 
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data=PredictMap, aes(color=SalePrice.Predict),
+  geom_sf(data=allprices.sf, aes(color=SalePrice),
           show.legend = "line", size = 1) + 
-  labs(title = "Predicted Home Prices") +
+  labs(title = "Predicted & Training Set Home Prices",       
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
   scale_color_viridis(option="C", 
                       name = "Price ($)", 
                       limits=c(10000,1000000),
@@ -962,10 +988,9 @@ ggplot() +
                       end = .95,
                       na.value = .95)
 
-
-
 ```
-### Commented out some plots b/c don't think they're needed (See Below)
+
+
 ```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #i think we can delete this code
 # MAPE by Neighborhood
@@ -978,50 +1003,55 @@ ggplot() +
 
 
 ```
-These next two maps look at our residuals and test set mean errors by neighborhood. 
+
+## Errors by Neighborhood
+
+This map look mean test set errors by neighborhood. 
 ````{r Residuals and MAPE by Neighborhood, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-miami.test <-
-  miami.test %>%
+
+miami.test$Brownsville.MS <- ifelse(is.na(miami.test$Brownsville.MS),0,miami.test$Brownsville.MS)
+miami.test$CitrusGrove.MS <- ifelse(is.na(miami.test$CitrusGrove.MS),0,miami.test$CitrusGrove.MS)
+miami.test$JosedeDiego.MS <- ifelse(is.na(miami.test$JosedeDiego.MS),0,miami.test$JosedeDiego.MS)
+miami.test$GeorgiaJA.MS <- ifelse(is.na(miami.test$GeorgiaJA.MS),0,miami.test$GeorgiaJA.MS)
+miami.test$KinlochPk.MS <- ifelse(is.na(miami.test$KinlochPk.MS),0,miami.test$KinlochPk.MS)
+miami.test$Madison.MS <- ifelse(is.na(miami.test$Madison.MS),0,miami.test$Madison.MS)
+miami.test$Nautilus.MS <- ifelse(is.na(miami.test$Nautilus.MS),0,miami.test$Nautilus.MS)
+miami.test$Shenandoah.MS <- ifelse(is.na(miami.test$Shenandoah.MS),0,miami.test$Shenandoah.MS)
+miami.test$WestMiami.MS <- ifelse(is.na(miami.test$WestMiami.MS),0,miami.test$WestMiami.MS)
+
+miami.test_preds <- miami.test %>%
   mutate(Regression = "Baseline Regression",
          SalePrice.Predict = predict(finaltraining, miami.test),
          SalePrice.Error = SalePrice.Predict - SalePrice,
          SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
          SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)
 
-map_preds_sum <- map_preds %>% 
+map_preds_sum <- miami.test %>% 
   group_by(GEOID) %>% 
-  summarise(meanMAE = mean(SalePrice.AbsError))
+  summarise(meanMAPE = mean(SalePrice.APE))
+
+map_MAPE <- miami.test %>% 
+            left_join(st_drop_geometry(map_preds_sum), by = "GEOID")
+
 #if this doesn't work remove annotation map
-
-ggplot() +
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data = miami.test, aes(color = SalePrice.Error, size = .1)) +
-  scale_fill_manual(values = palette5,
-                    labels=qBr(miami.test,"SalePrice.Error"),
-                    name="Quintile\nBreaks")
-  labs(title = "Test Set Residuals")+
-  mapTheme()
-
-
-
-ggplot() +
-  annotation_map_tile("cartolight") +
-  geom_sf(data=miami.base, fill='transparent') + 
-  geom_sf(data = miamiHomesClean.sf %>% 
-            left_join(st_drop_geometry(map_preds_sum), by = "GEOID"),
-          aes(color = q5(meanMAE)), size = .8) +
-  scale_fill_manual(values = palette5,
-                    labels=qBr(nhood_sum,"meanMAE"),
-                    name="Quintile\nBreaks") +
-  mapTheme() +
-  labs(title="Absolute sale price errors on the out-of-fold set by Neighborhood",
-       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.")
+colors2 <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d','gray')
   
-
+# MAPE Map
+ggplot() +
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data = miami.test, aes(color = SalePrice.APE),  size = 2) +
+  labs(title = "Errors by Neighborhood (MAPE)",
+       caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.") +
+  mapTheme() +
+  scale_color_viridis(name='MAPE',
+                      direction = -1) 
+  
 ```
+
+
 This scatterplot looks at our errors in relation to price by neighborhood. Our errors grow larger for more expensive homes. 
-````{r Price-MAPE Scatter, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+````{r Price-MAPE Scatter, echo=FALSE, message=FALSE, warning=FALSE}
 miami.test <-
   miami.test %>%
   mutate(Regression = "Baseline Regression",
@@ -1044,6 +1074,8 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
      ylab = "Mean MAE")
 
 ```
+
+## Generalizability by Income
 These results show that our model does differ drastically across income, therefore struggling with generalizability.
 ```{r income generalizability, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Testing Generalizability of Median Household Income Split
@@ -1080,7 +1112,7 @@ miamiRichLM <-
 
 ```
 
-```{r}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 kable(miamiPoorLM$results)
 
 kable(miamiRichLM$results)
