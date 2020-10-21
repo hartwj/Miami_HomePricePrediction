@@ -978,8 +978,8 @@ ggplot() +
 
 
 ```
-This looks at our test set errors by neighborhood. 
-````{r abs err map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+These next two maps look at our residuals and test set mean errors by neighborhood. 
+````{r Residuals and MAPE by Neighborhood, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 miami.test <-
   miami.test %>%
   mutate(Regression = "Baseline Regression",
@@ -991,7 +991,20 @@ miami.test <-
 map_preds_sum <- map_preds %>% 
   group_by(GEOID) %>% 
   summarise(meanMAE = mean(SalePrice.AbsError))
-#if this doesn't work remove annotation map and base
+#if this doesn't work remove annotation map
+
+ggplot() +
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data = miami.test, aes(color = SalePrice.Error, size = .1)) +
+  scale_fill_manual(values = palette5,
+                    labels=qBr(miami.test,"SalePrice.Error"),
+                    name="Quintile\nBreaks")
+  labs(title = "Test Set Residuals")+
+  mapTheme()
+
+
+
 ggplot() +
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
