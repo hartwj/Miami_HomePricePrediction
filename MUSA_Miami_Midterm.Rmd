@@ -629,7 +629,18 @@ ggarrange(a,b,c,d, ncol = 2, nrow = 2)
 
 ```
 
-# Method
+# Methods
+
+Our goal was to build a model that most accurately predicted Miami home prices. This was not a black-and-white procedure. We had three main considerations: 1) explain the variance in home prices, 2) minimize errors in predictions, and 3) be generalizable. Our first models used a simple ordinary least squares (OLS) regression. The results allowed us to exclude some census variables and remove overlapping variables (like square feet). In the next step we split our dataset 60/40, trained a model on 60% of the data, and tested it on the remaining 40%. This process gave us some insight into the model’s generalizability; it also allowed us to remove some variables. For example, this stage revealed that census tracts were our most influential neighborhood categorization, instead of property or mailing zip codes.
+
+The last stage involved a machine learning method known as “k-fold cross validation”. Basically we split our dataset into ten different subsets, which were then divided further into training and test datasets. We measured the average performance across these folds - this was the best way to measure generalizability. We tried different combinations of features until we settled on a model that had the lowest errors in relation to actual sale price. 
+
+ 
+
+
+
+
+
 
 ```{r regression, message=FALSE, warning=FALSE, include=FALSE}
 
@@ -703,7 +714,7 @@ cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)
 
 # Results
 
-The first regression we combined our feature engineering variables to see which were statistically significant. The second regression includes all of the off-the-shelf features with our custom features. Model improves a lot by R2.
+Our first regression was based on our feature engineering. We included census variables, shoreline distance and middle school distance, but excluded household details. This resulted in several statistically significant features, an adjusted R2 of 0.599 and an overall model F-statistic implies statistical significance. The intercept, $274,600, is the estimated mean sale price when all of our independent variables are zero. For every additional foot from the shore, the sale price will drop by $5.75. Our second model below on the right, includes all of the census variables, household variables, and some of our feature engineering. The adjusted R2 improves to 0.732. 
 
 ```{r histogram, message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
 
@@ -767,6 +778,8 @@ write.csv(output_preds, "Florid-API Keys.csv")
 
 ```
 
+
+The histogram below examines our final cross validation model run on 100 folds. The MAE, or Mean Absolute Error, measures the difference in actual and predicted sales price across each test subset. Our errors clustered between $50k and $75k. 
 ```{r mae histogram, message=FALSE, warning=FALSE, echo=FALSE}
 ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
   labs(title="Histogram of Cross Validation MAE",
@@ -780,7 +793,7 @@ regCV2plot <- as.data.frame(reg.cv2$pred)
 
 
 ```
-
+Our final model was much more accurate at predicting home prices at lower values. Removing outliers above $1M improves our overall mean errors, but limits our predictive power at higher home values. 
 ```{r pred v obs plot, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
   geom_point() +
@@ -791,12 +804,11 @@ ggplot(regCV2plot,aes(obs,pred)) +
   labs(title="Predicted sale price as a function of observed price",
        subtitle="Orange line represents a perfect prediction; Green line represents prediction",
        x="Sale Price",
-       y="Predicted Price",
-       caption='Figure x.x') +
+       y="Predicted Price") +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
 ```
-
+Juliana - no clue what these maps are for, so I'll defer to you. Made up this: The map on the left shows our prediction for all home prices in Miami. The map on the right shows all home prices in the training dataset. 
 ``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
   st_sf()
@@ -868,14 +880,13 @@ neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
 miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 ```
-
+Home prices are spatially autocorrelated with neighbors according to our model. In addition, the bottom chart shows that errors are also spacially correlated with neighbors. 
 ```{r, spatial lag err plots, echo=FALSE, message=FALSE, warning=FALSE}
 # Spatial Lag Error Plots
 ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
   geom_point(colour = "#FA7800") +
   geom_smooth(method = "lm", se = FALSE, colour = "#25CB10") +
   labs(title = "Price as a function of the spatial lag of price",
-       caption = "Public Policy Analytics, Figure 6.6",
        x = "Spatial lag of price (Mean price of 5 nearest neighbors)",
        y = "Sale Price") +
   plotTheme()
@@ -890,7 +901,7 @@ ggplot(miami.test.lag, aes(x=lagPriceError, y=SalePrice)) +
   plotTheme()
 
 ```
-
+Our observed Moran's I, denoted by the vertical orange line, is statistically higher than the randomly permuted I, thus there exists spatial autocorrelation in our final model. 
 ```{r morans, echo=FALSE, message=FALSE, warning=FALSE}
 #Moran's I Test
 moranTest <- moran.mc(miami.test.lag$SalePrice.AbsError, 
@@ -903,8 +914,7 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
   labs(title="Observed and permuted Moran's I",
        subtitle= "Observed Moran's I in orange",
        x="Moran's I",
-       y="Count",
-       caption="Public Policy Analytics, Figure 6.8") +
+       y="Count") +
   plotTheme()
 
 ```
