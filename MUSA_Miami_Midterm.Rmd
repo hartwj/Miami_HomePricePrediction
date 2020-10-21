@@ -692,7 +692,17 @@ summary(reg2_split)
 
 ```
 
-```{r mae/mape, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+
+
+
+# Results
+
+Our first regression was based on our feature engineering. We included census variables, shoreline distance and middle school distance, but excluded household details. This resulted in several statistically significant features, an adjusted R2 of 0.599 and an overall model F-statistic implies statistical significance. The intercept, $274,600, is the estimated mean sale price when all of our independent variables are zero. For every additional foot from the shore, the sale price will drop by $5.75. Our second model below on the right, includes all of the census variables, household variables, and some of our feature engineering. The adjusted R2 improves to 0.732. 
+
+This table shows our mean absolute error and mean absolute percent error for a single test set. Clearly more work needed to be done to improve our model.
+
+```{r mae/mape, warning=FALSE, message=FALSE, echo=FALSE}
 # Calculating MAE and MAPE for a single test test
 mape <- function(actual,pred){
   mape <- mean(abs((actual - pred)/actual))*100
@@ -703,20 +713,15 @@ reg2MAE <- caret::MAE(predict(reg2_split), miami.test$SalePrice)
 reg2MAPE <- mape(miami.test$SalePrice,predict(reg2_split))
 
 
-cat("Train MAE: ", as.integer(reg2MAE), " \n","Test MAE: ", as.integer(reg2MAPE)) %>%
+cat("Single Test MAE and MAPE"," \n","Test MAE: ", as.integer(reg2MAE), " \n","Test MAPE: ", as.integer(reg2MAPE)) %>%
   knitr::kable()
   
 
 #The neighborhood variables clearly make our model better, but could still be overfitting
 ```
 
-
-
-# Results
-
-Our first regression was based on our feature engineering. We included census variables, shoreline distance and middle school distance, but excluded household details. This resulted in several statistically significant features, an adjusted R2 of 0.599 and an overall model F-statistic implies statistical significance. The intercept, $274,600, is the estimated mean sale price when all of our independent variables are zero. For every additional foot from the shore, the sale price will drop by $5.75. Our second model below on the right, includes all of the census variables, household variables, and some of our feature engineering. The adjusted R2 improves to 0.732. 
-
-```{r histogram, message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
+These are the high level results of our final model based on the features discussed in the introduction. We were able to explain about 75% of the variance in sale prices, while our distance from sale price average about +/- $66,000. 
+```{r histogram, echo=FALSE, message=FALSE, warning=FALSE}
 
 fitControl <- trainControl(method = "cv", 
                            number = 100,
@@ -735,17 +740,12 @@ reg.cv2 <-
         trControl = fitControl, 
         na.action = na.omit)
 
-reg.cv2
+print(reg.cv2)
 
 #Providing Results of Cross Validation Test
 reg.cv2$results %>%
   knitr::kable()
 
-#Creating an MAE Histogram
-MAE_hist <- as.data.frame(reg.cv2$pred) %>%
-  mutate(ABS_error = abs(pred-obs)) %>%
-  group_by(Resample) %>%
-  summarize(MAE = mean(ABS_error, na.rm = T))
 
 ```
 
@@ -779,8 +779,15 @@ write.csv(output_preds, "Florid-API Keys.csv")
 ```
 
 
-The histogram below examines our final cross validation model run on 100 folds. The MAE, or Mean Absolute Error, measures the difference in actual and predicted sales price across each test subset. Our errors clustered between $50k and $75k. 
+The histogram below examines our final cross validation model run on 100 folds. The MAE, or Mean Absolute Error, measures the difference in actual and predicted sales price across each test subset. Our errors clustered between $50k and $75k. From this plot alone, it is difficult to say whether our model is generalizable.
 ```{r mae histogram, message=FALSE, warning=FALSE, echo=FALSE}
+#Creating an MAE Histogram
+MAE_hist <- as.data.frame(reg.cv2$pred) %>%
+  mutate(ABS_error = abs(pred-obs)) %>%
+  group_by(Resample) %>%
+  summarize(MAE = mean(ABS_error, na.rm = T))
+
+
 ggplot(MAE_hist, aes(x=MAE))+geom_histogram()+
   labs(title="Histogram of Cross Validation MAE",
        caption="Based on 100 Folds")+
@@ -808,7 +815,7 @@ ggplot(regCV2plot,aes(obs,pred)) +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
 ```
-Juliana - no clue what these maps are for, so I'll defer to you. Made up this: The map on the left shows our prediction for all home prices in Miami. The map on the right shows all home prices in the training dataset. 
+The following two charts show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model struggles to capture the higher-priced homes in dark purple.
 ``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
   st_sf()
@@ -919,9 +926,9 @@ ggplot(as.data.frame(moranTest$res[c(1:999)]), aes(moranTest$res[c(1:999)])) +
 
 ```
 
-### Commented out some plots b/c don't think they're needed (See Below)
-```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-#Provide a map of your predicted values for where ‘toPredict’ is both 0 and 1.
+The chart below looks at all 3503 observations from the dataset, including those where no sale price is known. It applies our final model predictions. 
+```{r Predicted Values when toPredict is 0 and 1}
+#Updated this, hopefully it works
 
 PredictMap <-
   miamiHomesClean.sf %>%
@@ -939,29 +946,52 @@ PredictMap <-
                     #name="Quintile\nBreaks") +
   #mapTheme() 
 
-#This really needs a basemap or something but it works
+
+ggplot() + 
+  annotation_map_tile("cartolight") +
+  geom_sf(data=miami.base, fill='transparent') + 
+  geom_sf(data=PredictMap, aes(color=SalePrice.Predict),
+          show.legend = "line", size = 1) + 
+  labs(title = "Predicted Home Prices") +
+  scale_color_viridis(option="C", 
+                      name = "Price ($)", 
+                      limits=c(10000,1000000),
+                      breaks=c(0, 250000, 500000, 750000, 1000000),
+                      direction = -1,
+                      begin = 0,
+                      end = .95,
+                      na.value = .95)
 
 
+
+```
+### Commented out some plots b/c don't think they're needed (See Below)
+```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#i think we can delete this code
 # MAPE by Neighborhood
-
-nhood_sum <- miami.test %>% 
-  group_by(GEOID) %>%
-  summarize(meanPrice = mean(SalePrice, na.rm = T),
-            meanPrediction = mean(SalePrice.Predict, na.rm = T),
-            meanMAE = mean(SalePrice.AbsError, na.rm = T))
 
 #nhood_sum %>% 
   #st_drop_geometry %>%
   #arrange(desc(meanMAE)) %>% 
   #kable() %>% kable_styling()
 
+
+
+```
+This looks at our test set errors by neighborhood. 
+````{r abs err map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+miami.test <-
+  miami.test %>%
+  mutate(Regression = "Baseline Regression",
+         SalePrice.Predict = predict(finaltraining, miami.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)
+
 map_preds_sum <- map_preds %>% 
   group_by(GEOID) %>% 
   summarise(meanMAE = mean(SalePrice.AbsError))
-
-```
-
-````{r abs err map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#if this doesn't work remove annotation map and base
 ggplot() +
   annotation_map_tile("cartolight") +
   geom_sf(data=miami.base, fill='transparent') + 
@@ -976,14 +1006,32 @@ ggplot() +
        caption = "Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.")
   
 
+```
+This scatterplot looks at our errors in relation to price by neighborhood. Our errors grow larger for more expensive homes. 
+````{r Price-MAPE Scatter, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+miami.test <-
+  miami.test %>%
+  mutate(Regression = "Baseline Regression",
+         SalePrice.Predict = predict(finaltraining, miami.test),
+         SalePrice.Error = SalePrice.Predict - SalePrice,
+         SalePrice.AbsError = abs(SalePrice.Predict - SalePrice),
+         SalePrice.APE = (abs(SalePrice.Predict - SalePrice)) / SalePrice.Predict)
+
+
 #Scatter of MAPE & Mean Price by Neighborhood
+nhood_sum <- miami.test %>% 
+  group_by(GEOID) %>%
+  summarize(meanPrice = mean(SalePrice, na.rm = T),
+            meanPrediction = mean(SalePrice.Predict, na.rm = T),
+            meanMAE = mean(SalePrice.AbsError, na.rm = T))
 
 plot(nhood_sum$meanPrice, nhood_sum$meanMAE, 
      main = "Scatter of Mean Price and Mean MAE by Census Tract", 
      xlab = "Mean Price",
      ylab = "Mean MAE")
-```
 
+```
+These results show that our model does differ drastically across income, therefore struggling with generalizability.
 ```{r income generalizability, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Testing Generalizability of Median Household Income Split
 
@@ -1006,7 +1054,6 @@ miamiPoorLM <-
         trControl = fitControl, 
         na.action = na.pass)
 
-miamiPoorLM
 
 miamiRichLM <- 
   train(SalePrice ~ ., data = miamiRich %>%
@@ -1018,8 +1065,6 @@ miamiRichLM <-
         trControl = fitControl, 
         na.action = na.omit)
 
-miamiRichLM
-miamiRichLM
 ```
 
 ```{r}
