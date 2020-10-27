@@ -806,7 +806,8 @@ regCV2plot <- as.data.frame(reg.cv2$pred)
 ```
 
 ## Scatterplot of Predicted and Observed Sale Prices
-Our final model was much more accurate at predicting home prices at lower values. Removing outliers above $1M improves our overall mean errors, but limits our predictive power at higher home values. 
+Our final model was much more accurate at predicting prices that fell in the lower-middle range for homes. Because we removed homes that cost more than $1 million from our training data, our model is particularly nongeneralizable when it comes to the upper end of the price spectrum (vastly underestimates the price of expensive homes). Removing outliers improves our overall mean errors, but hurts our predictive power at higher home values. 
+
 ```{r pred v obs plot, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
   geom_point() +
@@ -822,7 +823,8 @@ ggplot(regCV2plot,aes(obs,pred)) +
 
 ```
 
-The following two charts show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model struggles to capture the higher-priced homes in dark purple.
+The following two maps show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model fails to capture higher-priced homes along the coast and lower-priced homes in the Northwest by Hialeah (missing variation in colors as seen in training data map).
+
 ``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
   st_sf()
@@ -1075,7 +1077,7 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
 
 ```
 
-## Generalizability by Income
+## Split by Census Group: Generalizability by Income
 These results show that our model does differ drastically across income, therefore struggling with generalizability.
 ```{r income generalizability, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Testing Generalizability of Median Household Income Split
