@@ -28,7 +28,6 @@ library(rmarkdown)
 library(kableExtra)
 library(viridis)
 library(tidycensus)
-library(osmdata)
 library(mapview)
 library(lubridate)
 library(ggcorrplot)
@@ -369,11 +368,11 @@ miamiHomes.test <- miamiHomesClean.sf %>%
 
 An accurate home price prediction algorithm can reduce volatility in the housing market and take into account existing factors that may not be reflected in a home’s previous selling prices (e.g., new roof, new shopping center, etc.) However, predictive algorithms can also be exceedingly difficult to perfect. A falsely high average estimate in a neighborhood might lead home sellers to list their homes at too high an asking price and dragging out the process of selling their home, thereby introducing friction into the housing market. A falsely low estimate may depress the value of what is oftentimes a homeowner’s most valuable asset.  
 
-This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities and external features like schools, parks, and access to major roads. One interesting finding from this process is that a home's location in a middle school zone shows a positive relationship with home prices, but bot elementary or high school zone. 
+This project attempts to predict housing prices in metropolitan Miami by taking into consideration a home’s unique features (e.g., fence, patio) as well as considering local amenities and external features like schools, parks, and access to major roads. One interesting finding from this process is that a home's location in a middle school zone shows a positive relationship with home prices, but not elementary or high school zone. 
 
 To create our model, we converted our features of interest into variables that can be fed into an OLS regression model. We tested each featured for correlation with home sale prices and fine-tuned our model until we were able to minimize error.  
 
-After testing and rejecting several features that did not deduce our prediction errors (e.g., distances to nearest park, major road, and middle school), we ultimately settled on the features (dependent variables) listed below. 
+After testing and rejecting several features that did not deduce our prediction errors (e.g., distances to nearest park, major road, and elementary & high schools), we ultimately settled on the features (dependent variables) listed below. 
                         
 1. Location/External Features
     * Property.City: Miami, Miami City
@@ -466,7 +465,7 @@ ggplot() +
 
 ## Independent Variable Map #4: Percent White Residents
 
-Below is a map of the percent of White residents in each Census tract in Miami and Miami Beach. As shown below, although having a higher percentage of White residence does not appear to be closely correlated with home price, the absence of White residents is clearly tied to a lower estimate of home price.
+Below is a map of the percent of White residents in each Census tract in Miami and Miami Beach. As shown below, although having a higher percentage of White residence does not appear to be directly or perfectly correlated with home price, the absence of White residents is clearly tied to a lower estimate of home price.
 
 ```{r white, echo=FALSE, message=FALSE, warning=FALSE}
 colors <- c('#f1eef6', '#bdc9e1', '#74a9cf', '#2b8cbe', '#045a8d')
@@ -631,13 +630,7 @@ ggarrange(a,b,c,d, ncol = 2, nrow = 2)
 
 Our goal was to build a model that most accurately predicted Miami home prices. This was not a black-and-white procedure. We had three main considerations: 1) explain the variance in home prices, 2) minimize errors in predictions, and 3) be generalizable. Our first models used a simple ordinary least squares (OLS) regression. The results allowed us to exclude some census variables and remove overlapping variables (like square feet). In the next step we split our dataset 60/40, trained a model on 60% of the data, and tested it on the remaining 40%. This process gave us some insight into the model’s generalizability; it also allowed us to remove some variables. For example, this stage revealed that census tracts were our most influential neighborhood categorization, instead of property or mailing zip codes.
 
-The last stage involved a machine learning method known as “k-fold cross validation”. Basically we split our dataset into ten different subsets, which were then divided further into training and test datasets. We measured the average performance across these folds - this was the best way to measure generalizability. We tried different combinations of features until we settled on a model that had the lowest errors in relation to actual sale price. 
-
- 
-
-
-
-
+The last stage involved a machine learning method known as “k-fold cross validation,” by which we split our dataset into ten different subsets, which were then each divided further into training and test sets. We measured the average performance across each of these folds in order to measure generalizability. We tested different combinations of features until we settled on a model that had the lowest errors in relation to actual sale price. 
 
 
 ```{r regression, message=FALSE, warning=FALSE, include=FALSE}
@@ -797,7 +790,10 @@ regCV2plot <- as.data.frame(reg.cv2$pred)
 
 
 ```
-Our final model was much more accurate at predicting home prices at lower values. Removing outliers above $1M improves our overall mean errors, but limits our predictive power at higher home values. 
+
+## Scatterplot of Predicted and Observed Sale Prices
+Our final model was much more accurate at predicting prices that fell in the lower-middle range for homes. Because we removed homes that cost more than $1 million from our training data, our model is particularly nongeneralizable when it comes to the upper end of the price spectrum (vastly underestimates the price of expensive homes). Removing outliers improves our overall mean errors, but hurts our predictive power at higher home values. 
+
 ```{r pred v obs plot, message=FALSE, warning=FALSE}
 ggplot(regCV2plot,aes(obs,pred)) +
   geom_point() +
@@ -812,7 +808,8 @@ ggplot(regCV2plot,aes(obs,pred)) +
   plotTheme() + theme(plot.title = element_text(size = 18, colour = "black")) 
 
 ```
-The following two charts show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model struggles to capture the higher-priced homes in dark purple.
+
+The following two maps show our predicted home prices based on our final model in comparison to all the actual home prices used in the training dataset. Our model fails to capture higher-priced homes along the coast and lower-priced homes in the Northwest by Hialeah (missing variation in colors as seen in training data map).
 ``` {r pred v obs map, echo=FALSE, message=FALSE, warning=FALSE}
 allprices.sf <- full_join(trainprice.sf %>% as.data.frame(), map_preds %>% as.data.frame())%>%
   st_sf()
@@ -884,7 +881,9 @@ neighborList.test <- knn2nb(knearneigh(coords.test, k_nearest_neighbors))
 spatialWeights.test <- nb2listw(neighborList.test, style="W")
 miami.test.lag$lagPriceError <- lag.listw(spatialWeights.test, miami.test.lag$SalePrice.AbsError)
 ```
+
 Home prices are spatially autocorrelated with neighbors according to our model. In addition, the bottom chart shows that errors are also spacially correlated with neighbors. 
+
 ```{r, spatial lag err plots, echo=FALSE, message=FALSE, warning=FALSE}
 # Spatial Lag Error Plots
 ggplot(miamiHomesClean.sf, aes(x=lagPrice, y=SalePrice)) +
@@ -905,7 +904,9 @@ ggplot(miami.test.lag, aes(x=lagPriceError, y=SalePrice)) +
   plotTheme()
 
 ```
+
 Our observed Moran's I, denoted by the vertical orange line, is statistically higher than the randomly permuted I, thus there exists spatial autocorrelation in our final model. 
+
 ```{r morans, echo=FALSE, message=FALSE, warning=FALSE}
 #Moran's I Test
 moranTest <- moran.mc(miami.test.lag$SalePrice.AbsError, 
@@ -1027,7 +1028,11 @@ plot(nhood_sum$meanPrice, nhood_sum$meanMAE,
      ylab = "Mean MAE")
 
 ```
-These results show that our model does differ drastically across income, therefore struggling with generalizability.
+
+## Generalizability: Split by Census Group (Income)
+
+Finally, we used census data to test generalizability by average census tract household income. These results show that our model does differ drastically across income, therefore struggling with generalizability.
+
 ```{r income generalizability, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 #Testing Generalizability of Median Household Income Split
 
@@ -1068,3 +1073,8 @@ kable(miamiPoorLM$results)
 
 kable(miamiRichLM$results)
 ```
+
+# Conclusion
+
+In conclusion, the high mean average error (i.e., poor accuracy) and low generalizability of this model does not recommend its use. The average error is still approximately $67K, which is far too large an error for a use case as high-stakes as predicting housing prices for the reasons mentioned in the Introduction. This model is clearly missing additional features relevant to home prices, and future iterations of this model will need to account for the not insignifcant number of extremely high-value homes in Miami and Miami Beach, as well as the spatially clustered set of low-price homes in the Northeast of Miami.
+
