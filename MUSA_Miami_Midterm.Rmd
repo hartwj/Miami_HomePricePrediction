@@ -6,9 +6,7 @@ output:
   html_document:
     code_folding: hide
     toc: true
-    toc_float:
-      toc_collapsed: true
-    toc_depth: 3
+    toc_float: true
     number_sections: true
     theme: lumen
 ---
@@ -964,19 +962,7 @@ ggplot() +
 
 
 ```
-### Commented out some plots b/c don't think they're needed (See Below)
-```{r mape map, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-#i think we can delete this code
-# MAPE by Neighborhood
 
-#nhood_sum %>% 
-  #st_drop_geometry %>%
-  #arrange(desc(meanMAE)) %>% 
-  #kable() %>% kable_styling()
-
-
-
-```
 These next two maps look at our residuals and test set mean errors by neighborhood. 
 ````{r Residuals and MAPE by Neighborhood, echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 miami.test <-
@@ -990,7 +976,6 @@ miami.test <-
 map_preds_sum <- map_preds %>% 
   group_by(GEOID) %>% 
   summarise(meanMAPE = mean(SalePrice.APE))
-#if this doesn't work remove annotation map
 
 ggplot() +
   annotation_map_tile("cartolight") +
